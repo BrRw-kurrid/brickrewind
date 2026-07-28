@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>BrickRewind v0.18 — sloop je LEGO-set in omgekeerde volgorde</title>
+
+<!-- PWA-instellingen -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1C2333">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BrickRewind">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" href="icons/favicon.ico">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --paper:#F4F1E8;
+    --ink:#1C2333;
+    --ink-soft:#565F78;
+    --stud-yellow:#FFC629;
+    --amber:#C9701A;
+    --brick-red:#D2432A;
+    --bag-teal:#1F7A6C;
+    --line:#D8D2C0;
+    --card:#FFFFFF;
+    --radius:14px;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --display: "Archivo Black", "Arial Black", sans-serif;
+    --body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 1px 1px, rgba(28,35,51,0.06) 1px, transparent 0) 0 0/22px 22px,
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    min-height:100vh;
+    padding:28px 18px 80px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+
+  header{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px;}
+  .logo{display:flex; align-items:center; gap:10px;}
+  .logo-mark{
+    width:40px;height:40px;border-radius:8px;background:var(--stud-yellow);
+    border:3px solid var(--ink); position:relative; flex:none;
+  }
+  .logo-mark::after{
+    content:"";position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+    width:16px;height:9px;background:var(--stud-yellow);border:3px solid var(--ink);
+    border-bottom:none;border-radius:6px 6px 0 0;
+  }
+  h1{font-family:var(--display); font-size:30px; letter-spacing:-0.01em; margin:0; text-transform:uppercase;}
+  .tagline{font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:2px;}
+  .badge{
+    font-family:var(--mono); font-size:11px; color:var(--card); background:var(--brick-red);
+    padding:5px 10px; border-radius:999px; letter-spacing:.04em;
+  }
+
+  section{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 22px; margin-top:18px; box-shadow:0 1px 0 rgba(28,35,51,0.03);
+  }
+  .step-eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--bag-teal);
+    text-transform:uppercase; display:flex; align-items:center; gap:8px; margin-bottom:8px;
+  }
+  .step-eyebrow .num{
+    background:var(--ink); color:var(--paper); border-radius:5px; padding:1px 7px; font-weight:600;
+  }
+  h2{font-family:var(--display); font-size:16px; text-transform:uppercase; margin:0 0 12px; letter-spacing:.01em;}
+  p.hint{color:var(--ink-soft); font-size:13.5px; line-height:1.55; margin:0 0 14px;}
+  a{color:var(--brick-red);}
+
+  .row{display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;}
+  .field{display:flex; flex-direction:column; gap:6px;}
+  label{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft);}
+  input[type=text]{
+    font-family:var(--mono); font-size:14px; padding:10px 12px; border:2px solid var(--ink);
+    border-radius:8px; background:var(--paper); width:160px;
+  }
+  input[type=text].wide{width:220px;}
+  input[type=file]{font-family:var(--body); font-size:13px; max-width:100%;}
+  .file-picker-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .file-picker-btn{
+    font-family:var(--mono); font-size:12px; letter-spacing:.04em; text-transform:uppercase;
+    background:var(--ink); color:var(--paper); border:none; border-radius:8px;
+    padding:9px 14px; cursor:pointer; flex:none; display:inline-block; white-space:nowrap;
+  }
+  .file-picker-btn:hover{background:#000;}
+  .filename-inline{
+    font-family:var(--mono); font-size:12.5px; color:var(--bag-teal); word-break:break-all;
+    flex:1 1 auto; min-width:0;
+  }
+  .filename-inline.empty{color:var(--ink-soft); font-style:italic;}
+  .file-input-hidden{position:absolute; width:1px; height:1px; overflow:hidden; opacity:0;}
+  .file-drop{
+    border:2px dashed var(--line); border-radius:10px; padding:14px; flex:1; min-width:220px;
+    background:repeating-linear-gradient(45deg, rgba(28,35,51,0.02) 0 10px, transparent 10px 20px);
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .set-lookup-result{
+    margin-top:10px; display:flex; gap:14px; align-items:center; background:var(--paper);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+  }
+  .set-lookup-result img{
+    width:76px; height:76px; object-fit:contain; background:#fff; border-radius:8px; border:1px solid var(--line); flex:none;
+  }
+  .set-lookup-result .info{font-size:13px; line-height:1.55;}
+  .set-lookup-result .info b{display:block; font-size:14px;}
+  .set-lookup-result a{color:var(--brick-red);}
+  .set-suggestions{
+    margin-top:6px; border:1px solid var(--line); border-radius:10px; background:#fff; overflow:hidden;
+    max-height:280px; overflow-y:auto; box-shadow:0 4px 10px rgba(28,35,51,0.08);
+  }
+  .suggest-item{
+    display:flex; align-items:center; gap:10px; padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .suggest-item:last-child{border-bottom:none;}
+  .suggest-item:hover{background:var(--paper);}
+  .suggest-item img{width:36px; height:36px; object-fit:contain; background:var(--paper); border-radius:6px; flex:none;}
+  .suggest-item .num{font-family:var(--mono); color:var(--bag-teal); margin-right:4px;}
+  .suggest-item .loading, .suggest-item.empty{color:var(--ink-soft); cursor:default;}
+  .checkrow{display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:12px;}
+  .checkrow input{width:15px;height:15px;}
+  button{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.04em; text-transform:uppercase;
+    background:var(--ink); color:var(--paper); border:none; border-radius:8px;
+    padding:11px 18px; cursor:pointer; transition:transform .08s ease, background .15s ease;
+  }
+  button:hover{background:#000;}
+  button:active{transform:translateY(1px);}
+  button.secondary{background:transparent; color:var(--ink); border:2px solid var(--ink);}
+  button.ghost{background:transparent; color:var(--ink-soft); border:1px solid var(--line); padding:6px 10px; font-size:11px;}
+  button.go{background:var(--bag-teal);}
+  button.go:hover{background:#175f54;}
+  button.active-mode{background:var(--brick-red);}
+  button.active-mode:hover{background:#a8331f;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+
+  /* --- App-gevoel voor gebruik als geïnstalleerde PWA op tablet --- */
+  html, body{-webkit-tap-highlight-color:transparent;}
+  button, .file-picker-btn, .suggest-item{-webkit-user-select:none; user-select:none; touch-action:manipulation;}
+  button{min-height:44px;}
+  body{
+    padding-top:max(28px, env(safe-area-inset-top));
+    padding-left:max(18px, env(safe-area-inset-left));
+    padding-right:max(18px, env(safe-area-inset-right));
+    padding-bottom:max(80px, env(safe-area-inset-bottom));
+  }
+
+  #status{font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:10px; min-height:16px; white-space:pre-line;}
+
+  .resume-banner{
+    display:none; background:#FFF7DE; border:1px solid var(--stud-yellow); border-radius:10px;
+    padding:14px 16px; margin-bottom:16px; font-size:13.5px; line-height:1.5;
+  }
+  .resume-banner b{display:block; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#8a6d00; margin-bottom:4px;}
+  .resume-banner .btns{margin-top:10px; display:flex; gap:10px;}
+
+  #manualSlots{display:flex; flex-direction:column; gap:12px; width:100%;}
+  .manual-slot{display:flex; flex-direction:column; gap:4px;}
+  .manual-slot .row2{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .manual-slot .lbl{font-family:var(--mono); font-size:11px; color:var(--ink-soft); width:88px; flex:none;}
+
+  .mode-bar{
+    position:sticky; top:0; z-index:20; background:var(--card);
+    padding-top:2px; padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--line);
+  }
+  .numbering-box, .exclude-box{
+    background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+  }
+  .exclude-box{margin-top:10px;}
+  .numbering-box .tt, .exclude-box .tt{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--bag-teal); font-weight:600; margin-bottom:6px;}
+  #numberingStatus, #excludingStatus{font-family:var(--mono); font-size:12.5px; color:var(--brick-red); margin-top:8px; min-height:16px;}
+  .exclude-range-row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
+  .exclude-range-row .field{min-width:0;}
+  .exclude-range-row input[type=text]{width:90px;}
+  select{
+    font-family:var(--mono); font-size:13px; padding:9px 10px; border:2px solid var(--ink); border-radius:8px; background:var(--paper);
+  }
+
+  #pageGrid.numbering-active .pg{cursor:crosshair;}
+  #pageGrid.numbering-active .pg:hover{outline:2px solid var(--brick-red); outline-offset:1px;}
+  #pageGrid.excluding-active .pg{cursor:not-allowed;}
+  #pageGrid.excluding-active .pg:hover{outline:2px solid var(--ink-soft); outline-offset:1px;}
+  #pageGrid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:10px; margin-top:14px;
+  }
+  .grid-divider{
+    grid-column:1 / -1; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--ink-soft); border-top:1px dashed var(--line); padding-top:8px; margin-top:4px;
+  }
+  .pg{
+    border:2px solid var(--line); border-radius:8px; overflow:hidden; cursor:pointer; background:#fff;
+    position:relative; transition:border-color .12s ease;
+  }
+  .pg canvas, .pg img{display:block; width:100%; height:auto; opacity:.92;}
+  .pg .pgnum{
+    position:absolute; top:3px; left:4px; font-family:var(--mono); font-size:9px;
+    background:rgba(28,35,51,0.75); color:#fff; padding:1px 4px; border-radius:4px;
+  }
+  .pg .doclabel{
+    position:absolute; top:3px; right:4px; font-family:var(--mono); font-size:9px;
+    background:rgba(31,122,108,0.85); color:#fff; padding:1px 4px; border-radius:4px;
+  }
+  .pg .thumb-refresh{
+    position:absolute; bottom:22px; right:4px; width:18px; height:18px; padding:0; border-radius:50%;
+    background:rgba(28,35,51,0.72); color:#fff; border:none; font-size:11px; line-height:18px;
+    display:flex; align-items:center; justify-content:center; opacity:.55; z-index:2;
+  }
+  .pg .thumb-refresh:hover{opacity:1; background:var(--brick-red);}
+  .pg .tagchip{
+    position:absolute; bottom:0; left:0; right:0; font-family:var(--mono); font-size:9.5px;
+    text-align:center; padding:3px 2px; font-weight:600; letter-spacing:.02em;
+  }
+  .pg.type-step{border-color:var(--line);}
+  .pg.type-step .tagchip{background:rgba(255,255,255,.9); color:var(--ink-soft);}
+  .pg.type-bag{border-color:var(--bag-teal); border-width:3px;}
+  .pg.type-bag .tagchip{background:var(--bag-teal); color:#fff;}
+  .pg.type-skip{opacity:.4;}
+  .pg.type-skip .tagchip{background:var(--ink-soft); color:#fff;}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--ink-soft);}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .swatch{width:12px;height:12px;border-radius:3px; display:inline-block;}
+
+  #viewer{display:none;}
+  .viewer-title{font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:4px;}
+  .viewer-top{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .counter{font-family:var(--mono); font-size:13px;}
+  .counter b{font-size:20px;}
+  .doneCount{font-family:var(--mono); font-size:11.5px; color:var(--bag-teal);}
+  .save-indicator{
+    font-family:var(--mono); font-size:11.5px; color:var(--bag-teal); margin-top:6px;
+  }
+  .save-indicator.stale{color:var(--brick-red);}
+  .bagtag{
+    font-family:var(--mono); font-size:12.5px; background:var(--bag-teal); color:#fff;
+    padding:7px 14px; border-radius:6px; position:relative; transform:rotate(-2deg);
+    box-shadow:0 2px 0 rgba(0,0,0,.15);
+  }
+  .bagtag::before{
+    content:""; position:absolute; left:-6px; top:50%; width:10px; height:10px; background:var(--paper);
+    border:2px solid var(--bag-teal); border-radius:50%; transform:translateY(-50%);
+  }
+  .stage{
+    margin-top:16px; border:1px solid var(--line); border-radius:10px; background:var(--paper);
+    display:flex; align-items:center; justify-content:center; height:min(60vh,520px); position:relative;
+    overflow:hidden;
+  }
+  .stage img{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block;}
+  .stage .loading{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); text-align:center; padding:20px;}
+  .remove-flag{
+    position:absolute; top:10px; left:10px; background:var(--brick-red); color:#fff;
+    font-family:var(--mono); font-size:11px; padding:5px 10px; border-radius:6px; letter-spacing:.03em;
+  }
+  .instruction{
+    margin-top:14px; padding:14px 16px; background:var(--paper); border-left:4px solid var(--brick-red);
+    border-radius:0 8px 8px 0; font-size:14px; line-height:1.55;
+  }
+  .instruction b{color:var(--brick-red);}
+  .done-row{display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap;}
+  #doneBtn.is-done{background:var(--bag-teal);}
+  .nav-row{display:flex; justify-content:space-between; align-items:center; margin-top:16px; gap:10px;}
+  .nav-row .mid{flex:1; height:4px; background:var(--line); border-radius:2px; position:relative; overflow:hidden;}
+  .nav-row .mid i{position:absolute; left:0; top:0; bottom:0; background:var(--stud-yellow); display:block;}
+  .bottom-bar{
+    position:sticky; bottom:0; background:var(--card); border-top:1px solid var(--line);
+    margin:16px -22px -20px; padding:6px 22px 4px; z-index:6;
+  }
+  .save-indicator-sticky{font-family:var(--mono); font-size:11px; color:var(--bag-teal); text-align:center; margin-bottom:2px;}
+  .save-indicator-sticky.stale{color:var(--brick-red);}
+  #filmstrip{display:flex; gap:6px; overflow-x:auto; padding-bottom:8px;}
+  #filmstrip .f{
+    flex:none; width:52px; border:2px solid var(--line); border-radius:6px; overflow:hidden; cursor:pointer;
+    opacity:.6; position:relative;
+  }
+  #filmstrip .f.active{outline:3px solid var(--ink); outline-offset:1px; opacity:1;}
+  #filmstrip .f.done{opacity:.9;}
+  #filmstrip .f.done::after{
+    content:"✓"; position:absolute; top:1px; right:1px; width:14px; height:14px; border-radius:50%;
+    background:var(--bag-teal); color:#fff; font-size:10px; display:flex; align-items:center; justify-content:center;
+    z-index:2;
+  }
+  #filmstrip .f.bag-start{border-color:var(--bag-teal); border-width:4px; background:rgba(31,122,108,0.28);}
+  #filmstrip .f.bag-end{border-color:var(--amber); border-width:4px; background:rgba(201,112,26,0.26);}
+  #filmstrip .f.bag-start.bag-end{border-color:var(--stud-yellow); border-width:4px; background:rgba(255,198,41,0.35);}
+  #filmstrip .f.bag-start::before{
+    content:"B"; position:absolute; bottom:1px; left:1px; width:15px; height:15px; border-radius:50%;
+    background:var(--bag-teal); color:#fff; font-size:9px; font-weight:700; display:flex; align-items:center;
+    justify-content:center; z-index:2;
+  }
+  #filmstrip .f.bag-end::before{content:"E"; background:var(--amber);}
+  #filmstrip .f.bag-start.bag-end::before{content:"1"; background:var(--stud-yellow); color:var(--ink);}
+  #filmstrip .f canvas, #filmstrip .f img{display:block; width:100%; height:auto;}
+
+  /* focusweergave: bij het genereren verdwijnen de invoer-/markeerstappen, alleen de gids blijft in beeld */
+  body.viewer-focus section:not(#viewer){display:none;}
+  body.viewer-focus header{margin-bottom:10px;}
+
+  footer{text-align:center; margin-top:30px; font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <div>
+        <h1>BrickRewind</h1>
+        <div class="tagline">// demontage-gids, stap voor stap terug naar het zakje</div>
+        <div class="tagline" style="margin-top:1px;">© concept: Dirk van Delft</div>
+      </div>
+    </div>
+    <div class="badge">v0.18 — vaste filmstrook, duidelijke kleuren, opslag-check</div>
+  </header>
+
+  <div id="storageWarning" style="display:none; background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:13.5px; line-height:1.5;"></div>
+
+  <section>
+    <div class="step-eyebrow"><span class="num">1</span> Set &amp; instructieboekje</div>
+    <h2>Vul je set in en upload de officiële PDF('s)</h2>
+    <p class="hint">
+      BrickRewind kan een LEGO-instructie-PDF niet automatisch downloaden bij LEGO vandaan — daar is geen
+      openbare koppeling voor. Zoek je set op bij
+      <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>,
+      download de PDF('s) en upload ze hieronder. Alles blijft in je browser; er wordt niets verstuurd of ergens
+      automatisch opgezocht.
+    </p>
+    <div class="row" style="align-items:flex-end;">
+      <div class="field" style="flex:1;">
+        <label for="rebrickableKey">Rebrickable API-sleutel (optioneel)</label>
+        <input type="text" id="rebrickableKey" class="wide" style="width:100%;" placeholder="plak hier je gratis sleutel">
+      </div>
+    </div>
+    <p class="hint" style="margin-top:6px;">
+      <b>Experimenteel.</b> Er staat een Rebrickable-sleutel vooringevuld; terwijl je typt in het keuzemenu
+      hieronder komen setnummer, setnaam en foto automatisch op dezelfde rij. Wil je je eigen sleutel gebruiken
+      (aan te maken via <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">rebrickable.com/api</a>),
+      vervang de tekst hierboven dan — die wordt daarna in deze browser onthouden.
+    </p>
+
+    <div class="row">
+      <div class="field" style="position:relative;">
+        <label for="setnr">Setnummer</label>
+        <input type="text" id="setnr" placeholder="bv. 43279" autocomplete="off">
+      </div>
+      <div class="field" style="position:relative; flex:1;">
+        <label for="setnaam">Setnaam</label>
+        <input type="text" id="setnaam" class="wide" style="width:100%;" placeholder="bv. WALL-E" autocomplete="off">
+      </div>
+      <button class="ghost" id="lookupSetBtn" type="button">Zoek set op</button>
+    </div>
+    <div id="setSuggestions" class="set-suggestions" style="display:none;"></div>
+    <p class="hint" style="margin-top:8px;">
+      Setnummer en -naam worden ook gebruikt om je voortgang te herkennen als je later terugkomt (stap 2
+      hieronder) en om in de instructieteksten te tonen. Die voortgang wordt bewaard in déze browser op dit
+      apparaat (niet online) — open je BrickRewind later op een andere computer of in een andere browser, dan moet
+      je opnieuw beginnen.
+    </p>
+    <div id="setLookupResult" class="set-lookup-result" style="display:none;"></div>
+
+    <div class="row" style="margin-top:4px;">
+      <div class="field" id="singleFileRow" style="flex:1;">
+        <label for="pdfFileSingle">Officiële instructie-PDF</label>
+        <div class="file-drop">
+          <div class="file-picker-row">
+            <label class="file-picker-btn" for="pdfFileSingle">Bestand kiezen</label>
+            <span class="filename-inline empty" id="pdfFileSingleName">Geen bestand gekozen</span>
+          </div>
+          <input type="file" id="pdfFileSingle" accept="application/pdf" class="file-input-hidden">
+        </div>
+      </div>
+      <div class="field" id="multiFileRow" style="flex:1; display:none;">
+        <label>Handleidingen, in boekje-volgorde</label>
+        <div class="file-drop">
+          <div id="manualSlots"></div>
+          <button type="button" class="ghost" id="addManualBtn" style="align-self:flex-start; margin-top:4px;">+ Nog een handleiding</button>
+        </div>
+      </div>
+      <button id="loadBtn">PDF('s) inladen</button>
+    </div>
+    <div class="checkrow">
+      <input type="checkbox" id="multiManual">
+      <label for="multiManual" style="margin:0;">
+        Deze set bestaat uit meerdere handleidingen (PDF's) — de zakjesnummering loopt door vanaf handleiding 1
+      </label>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section id="markSection" style="display:none;">
+    <div class="step-eyebrow"><span class="num">2</span> Zakjes nummeren</div>
+    <h2>Markeer op welke pagina's een nieuw zakje begint</h2>
+
+    <div class="resume-banner" id="resumeBanner">
+      <b>Eerdere voortgang gevonden</b>
+      <span id="resumeText"></span>
+      <div class="btns">
+        <button class="go" id="resumeContinueBtn">Doorgaan waar ik gebleven was</button>
+        <button class="ghost" id="resumeIgnoreBtn">Negeren, opnieuw beginnen</button>
+      </div>
+    </div>
+
+    <div class="mode-bar" id="modeBar">
+      <div class="numbering-box">
+        <div class="tt">Zakjes nummeren</div>
+        <p class="hint" style="margin:0;">
+          Klik de knop aan, en klik daarna gewoon in volgorde op de miniaturen waarop een genummerd zakje te zien
+          is: de eerste klik wordt automatisch zakje 1, de tweede zakje 2, enzovoort — ook over meerdere
+          handleidingen heen. Per ongeluk verkeerd geklikt? Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te
+          maken. Deze balk blijft in beeld staan terwijl je scrolt, dus je hoeft niet terug naar boven om te stoppen.
+        </p>
+        <div class="row" style="margin-top:10px;">
+          <button class="go" id="numberBagsBtn">Zakjes nummeren starten</button>
+        </div>
+        <div id="numberingStatus"></div>
+      </div>
+
+      <div class="exclude-box">
+        <div class="tt">Pagina's uitsluiten</div>
+        <p class="hint" style="margin:0;">
+          Voor pagina's die niet bij een bouwstap horen (onderdelenfoto's, voor-/achterkant van een handleiding,
+          tussenpagina's): klik de knop aan en klik daarna elke pagina aan die je wilt uitsluiten — nogmaals
+          klikken maakt het ongedaan. Handig voor losse, verspreide pagina's.
+        </p>
+        <div class="row" style="margin-top:10px;">
+          <button class="secondary" id="excludeBagsBtn">Pagina's uitsluiten starten</button>
+        </div>
+        <div id="excludingStatus"></div>
+
+        <div class="exclude-range-row">
+          <div class="field" id="excludeDocField" style="display:none;">
+            <label for="excludeDocSelect">Handleiding</label>
+            <select id="excludeDocSelect"></select>
+          </div>
+          <div class="field">
+            <label for="excludeFrom">Van pagina</label>
+            <input type="text" id="excludeFrom" placeholder="bv. 1">
+          </div>
+          <div class="field">
+            <label for="excludeTo">Tot en met pagina</label>
+            <input type="text" id="excludeTo" placeholder="bv. 8">
+          </div>
+          <button class="ghost" id="applyExcludeRangeBtn">Uitsluiten</button>
+        </div>
+        <p class="hint" style="margin:8px 0 0;">
+          Sneller voor een aaneengesloten reeks, zoals de eerste of laatste pagina's van een handleiding.
+          Bestaande zakje-markeringen in het bereik blijven staan (die worden niet overschreven).
+        </p>
+        <div id="excludeRangeStatus" style="font-family:var(--mono); font-size:12px; margin-top:6px; min-height:16px;"></div>
+      </div>
+    </div>
+
+    <div id="pageGrid"></div>
+    <div class="legend">
+      <span><i class="swatch" style="background:#fff;border:2px solid var(--line);"></i> Bouwstap</span>
+      <span><i class="swatch" style="background:var(--bag-teal);"></i> Zakje-scheiding</span>
+      <span><i class="swatch" style="background:var(--ink-soft);"></i> Overslaan</span>
+    </div>
+    <p class="hint" style="margin-top:10px;">
+      Ook buiten de twee knoppen om kun je een pagina aanklikken om 'm te wisselen tussen <b>bouwstap</b> →
+      <b>zakje-scheiding</b> → <b>overslaan</b> — handig voor een losse correctie. Pagina's vóór het eerste
+      zakje (voorblad, onderdelenoverzicht) worden automatisch buiten de gids gehouden; het begin en eind van een
+      tweede handleiding moet je zelf uitsluiten met bovenstaande knoppen, want dat kan BrickRewind niet
+      betrouwbaar herkennen.
+    </p>
+
+    <div class="row" style="margin-top:18px;">
+      <button class="go" id="generateBtn">Genereer omgekeerde sloopgids →</button>
+      <button class="ghost" id="clearProgressBtn">Voortgang wissen</button>
+    </div>
+  </section>
+
+  <div id="viewerLaunchInfo" class="hint" style="display:none; margin-top:14px; padding:12px 16px; background:var(--card); border:1px solid var(--line); border-radius:10px;"></div>
+
+  <section id="viewer" style="display:none;">
+    <div class="row" style="justify-content:space-between; align-items:center;">
+      <div class="step-eyebrow" style="margin-bottom:0;"><span class="num">3</span> Demontagegids</div>
+      <button class="ghost" id="exitFocusBtn">← Terug naar zakjes/instellingen</button>
+    </div>
+    <div class="viewer-title" id="viewerTitle"></div>
+    <div class="viewer-top">
+      <div class="counter">Demontagestap <b id="curStep">1</b> / <span id="totStep">1</span></div>
+      <div class="doneCount" id="doneCount">0 van 0 afgerond</div>
+      <div class="bagtag" id="bagTag">→ terug in zakje 1</div>
+    </div>
+    <div id="saveIndicator" class="save-indicator">✓ Voortgang wordt automatisch opgeslagen</div>
+    <div class="stage">
+      <span class="remove-flag">HAAL DEZE ONDERDELEN ERAF</span>
+      <img id="stageImg" alt="bouwstap" style="display:none;">
+      <div id="stageLoading" class="loading">Bouwstap laden…</div>
+    </div>
+    <div class="instruction" id="instructionText"></div>
+    <div class="done-row"><button id="doneBtn">✓ Markeer deze stap als klaar</button></div>
+    <div class="nav-row">
+      <button class="secondary" id="prevBtn">← Vorige</button>
+      <div class="mid"><i id="progressBar" style="width:0%;"></i></div>
+      <button id="nextBtn">Volgende →</button>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="border-color:var(--bag-teal); background:rgba(31,122,108,0.12);"></i> Begin van een zakje</span>
+      <span><i class="swatch" style="border-color:var(--brick-red); background:rgba(210,67,42,0.10);"></i> Einde van een zakje</span>
+      <span><i class="swatch" style="border-color:var(--stud-yellow); background:rgba(255,198,41,0.18);"></i> Zakje van één stap (begin én einde)</span>
+    </div>
+    <div class="bottom-bar">
+      <div id="saveIndicatorSticky" class="save-indicator-sticky">✓ Voortgang wordt automatisch opgeslagen</div>
+      <div id="filmstrip"></div>
+    </div>
+  </section>
+
+  <footer>BrickRewind v0.18 — draait volledig lokaal in je browser. Geen data verlaat je apparaat.</footer>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const VERSION = "0.18";
+const THUMB_SCALE = 0.22;
+const THUMB_JPEG_QUALITY = 0.7;
+// Standaard Rebrickable-sleutel van Dirk van Delft; wordt bij een wijziging onthouden in deze browser,
+// zodat een andere gebruiker van dit bestand ook zijn/haar eigen sleutel kan invullen en die blijft staan.
+const DEFAULT_REBRICKABLE_KEY = "581e3346a98d6c4022c914169dde6c36";
+const REBRICKABLE_KEY_STORAGE = "brickrewind-rebrickable-key";
+
+let pdfDocs = [];        // pdf.js document objects, in booklet order
+let pageDocMap = [];     // pageDocMap[globalIndex-1] = { docIndex, pageNumInDoc }
+let totalPages = 0;
+let pageMeta = [];       // { index (global), type:'step'|'bag'|'skip', bagNumber, docIndex, canvas }
+let reversedSteps = [];
+let curIdx = 0;
+let doneSet = new Set(); // set of original global page indices marked "done"
+let numberingMode = false;
+let excludingMode = false;
+let hasFinishedNumbering = false; // true once "Zakjes nummeren stoppen" is clicked at least once
+
+// ---------- element refs ----------
+const statusEl = document.getElementById('status');
+const setnrInput = document.getElementById('setnr');
+const setnaamInput = document.getElementById('setnaam');
+const multiManualCheckbox = document.getElementById('multiManual');
+const singleFileRow = document.getElementById('singleFileRow');
+const multiFileRow = document.getElementById('multiFileRow');
+const manualSlots = document.getElementById('manualSlots');
+const addManualBtn = document.getElementById('addManualBtn');
+const pdfFileSingle = document.getElementById('pdfFileSingle');
+const loadBtn = document.getElementById('loadBtn');
+
+// ---------- multi-manual upload UI ----------
+function addManualSlot() {
+  const n = manualSlots.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'manual-slot';
+  const inputId = 'manualFile_' + n + '_' + Date.now();
+  row.innerHTML =
+    `<div class="row2"><span class="lbl">Handleiding ${n}</span>` +
+    `<label class="file-picker-btn" for="${inputId}">Bestand kiezen</label>` +
+    `<span class="filename-inline empty">Geen bestand gekozen</span></div>` +
+    `<input type="file" id="${inputId}" class="manualFileInput file-input-hidden" accept="application/pdf">`;
+  const input = row.querySelector('.manualFileInput');
+  const nameSpan = row.querySelector('.filename-inline');
+  input.addEventListener('change', () => {
+    if (input.files[0]) {
+      nameSpan.textContent = input.files[0].name;
+      nameSpan.classList.remove('empty');
+    } else {
+      nameSpan.textContent = 'Geen bestand gekozen';
+      nameSpan.classList.add('empty');
+    }
+  });
+  manualSlots.appendChild(row);
+}
+addManualBtn.addEventListener('click', addManualSlot);
+
+pdfFileSingle.addEventListener('change', () => {
+  const nameSpan = document.getElementById('pdfFileSingleName');
+  if (pdfFileSingle.files[0]) {
+    nameSpan.textContent = pdfFileSingle.files[0].name;
+    nameSpan.classList.remove('empty');
+  } else {
+    nameSpan.textContent = 'Geen bestand gekozen';
+    nameSpan.classList.add('empty');
+  }
+});
+
+// ---------- optionele setfoto-opzoekfunctie (experimenteel, best-effort) ----------
+// ---------- optionele setfoto-opzoekfunctie (experimenteel, best-effort) ----------
+function getRebrickableKey() { return document.getElementById('rebrickableKey').value.trim(); }
+
+(function testLocalStorage() {
+  const warn = document.getElementById('storageWarning');
+  try {
+    const testKey = 'brickrewind-storage-test';
+    localStorage.setItem(testKey, '1');
+    const readBack = localStorage.getItem(testKey);
+    localStorage.removeItem(testKey);
+    if (readBack !== '1') throw new Error('schrijven lukte, maar teruglezen niet');
+  } catch (e) {
+    warn.style.display = 'block';
+    warn.innerHTML =
+      '⚠ <b>Lokale opslag lijkt niet beschikbaar in deze browser/venster</b> (' + e.message + '). Dat betekent dat ' +
+      'BrickRewind je voortgang niet kan bewaren — sluit je een tabblad, dan ben je alles kwijt. Dit gebeurt vaak ' +
+      'in een privé-/incognitovenster, of als de browserinstellingen opslag door lokale bestanden blokkeren. ' +
+      'Probeer dit bestand in een gewoon (niet-privé) venster te openen.';
+  }
+})();
+
+(function initRebrickableKey() {
+  const input = document.getElementById('rebrickableKey');
+  let stored = null;
+  try { stored = localStorage.getItem(REBRICKABLE_KEY_STORAGE); } catch (e) { /* niet kritiek */ }
+  input.value = stored || DEFAULT_REBRICKABLE_KEY;
+  input.addEventListener('change', () => {
+    const v = input.value.trim();
+    try {
+      if (v) localStorage.setItem(REBRICKABLE_KEY_STORAGE, v);
+      else localStorage.removeItem(REBRICKABLE_KEY_STORAGE);
+    } catch (e) { /* niet kritiek */ }
+  });
+})();
+
+function showSetResult(hit) {
+  const resultBox = document.getElementById('setLookupResult');
+  resultBox.style.display = 'flex';
+  resultBox.innerHTML =
+    `<img src="${hit.set_img_url}" alt="${hit.name}">` +
+    `<div class="info"><b>${hit.name}</b>${hit.set_num} · ${hit.year}<br>` +
+    `<a href="https://rebrickable.com/sets/${hit.set_num}/" target="_blank" rel="noopener">Bekijk op Rebrickable →</a></div>`;
+}
+
+function applySuggestion(hit) {
+  setnrInput.value = hit.set_num.replace(/-1$/, '');
+  setnaamInput.value = hit.name;
+  hideSuggestions();
+  showSetResult(hit);
+}
+
+function hideSuggestions() {
+  const box = document.getElementById('setSuggestions');
+  box.style.display = 'none';
+  box.innerHTML = '';
+}
+
+async function fetchAndRenderSuggestions(query) {
+  const box = document.getElementById('setSuggestions');
+  const key = getRebrickableKey();
+  if (!key || query.trim().length < 2) { hideSuggestions(); return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="suggest-item loading">Zoeken…</div>';
+  try {
+    const url = 'https://rebrickable.com/api/v3/lego/sets/?search=' + encodeURIComponent(query.trim()) +
+      '&page_size=8&key=' + encodeURIComponent(key);
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const results = data.results || [];
+    if (!results.length) {
+      box.innerHTML = '<div class="suggest-item empty">Geen sets gevonden voor "' + query.trim() + '".</div>';
+      return;
+    }
+    box.innerHTML = results.map((hit, idx) =>
+      `<div class="suggest-item" data-idx="${idx}">` +
+      `<img src="${hit.set_img_url}" alt="" loading="lazy">` +
+      `<span><span class="num">${hit.set_num.replace(/-1$/, '')}</span>${hit.name} (${hit.year})</span>` +
+      `</div>`
+    ).join('');
+    Array.from(box.querySelectorAll('.suggest-item[data-idx]')).forEach((el, idx) => {
+      el.addEventListener('mousedown', (e) => { e.preventDefault(); applySuggestion(results[idx]); });
+    });
+  } catch (err) {
+    console.warn('Suggesties ophalen mislukt', err);
+    box.innerHTML = '<div class="suggest-item empty">Zoeken lukte niet (' + err.message + ').</div>';
+  }
+}
+
+let suggestTimer = null;
+function scheduleSuggest(query) {
+  clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(() => fetchAndRenderSuggestions(query), 450);
+}
+setnrInput.addEventListener('input', () => scheduleSuggest(setnrInput.value));
+setnaamInput.addEventListener('input', () => scheduleSuggest(setnaamInput.value));
+[setnrInput, setnaamInput].forEach(inp => {
+  // kleine vertraging zodat een klik op een suggestie nog geregistreerd wordt vóór het dichtklappen
+  inp.addEventListener('blur', () => setTimeout(hideSuggestions, 200));
+});
+
+document.getElementById('lookupSetBtn').addEventListener('click', async () => {
+  hideSuggestions();
+  const resultBox = document.getElementById('setLookupResult');
+  const key = getRebrickableKey();
+  const setnr = setnrInput.value.trim();
+  const setnaam = setnaamInput.value.trim();
+
+  resultBox.style.display = 'flex';
+  if (!setnr && !setnaam) {
+    resultBox.innerHTML = '<div class="info">Vul minstens een setnummer of setnaam in om te zoeken.</div>';
+    return;
+  }
+
+  const searchTerm = [setnr, setnaam].filter(Boolean).join(' ');
+  const fallbackUrl = 'https://rebrickable.com/search/?q=' + encodeURIComponent(searchTerm);
+  const fallbackLink = `<a href="${fallbackUrl}" target="_blank" rel="noopener">Bekijk "${searchTerm}" op Rebrickable →</a>`;
+
+  if (!key) {
+    resultBox.innerHTML = `<div class="info">Geen API-sleutel ingevuld, dus geen automatische foto hier. ${fallbackLink}</div>`;
+    return;
+  }
+
+  resultBox.innerHTML = '<div class="info">Zoeken…</div>';
+  try {
+    const apiUrl = 'https://rebrickable.com/api/v3/lego/sets/?search=' + encodeURIComponent(searchTerm) +
+      '&page_size=1&key=' + encodeURIComponent(key);
+    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const hit = data.results && data.results[0];
+    if (!hit) {
+      resultBox.innerHTML = `<div class="info">Geen resultaat gevonden voor "${searchTerm}". ${fallbackLink}</div>`;
+      return;
+    }
+    showSetResult(hit);
+    if (!setnaam) setnaamInput.value = hit.name;
+  } catch (err) {
+    console.warn('Setopzoeken mislukt', err);
+    resultBox.innerHTML = `<div class="info">Automatisch zoeken lukte niet in deze browser (${err.message}). ` +
+      `Dat kan aan Rebrickable's eigen instellingen liggen, niet per se aan je sleutel. ${fallbackLink}</div>`;
+  }
+});
+
+multiManualCheckbox.addEventListener('change', () => {
+  const on = multiManualCheckbox.checked;
+  singleFileRow.style.display = on ? 'none' : '';
+  multiFileRow.style.display = on ? '' : 'none';
+  if (on && !manualSlots.children.length) { addManualSlot(); addManualSlot(); }
+});
+
+// ---------- storage (save / resume progress) ----------
+function storageKey() {
+  const raw = setnrInput.value.trim();
+  if (!raw) return null;
+  // sla toegestane tekens plat: geen spaties/schuine strepen/aanhalingstekens in de sleutel
+  const clean = raw.toLowerCase().replace(/["'\\/]/g, '').replace(/\s+/g, '-');
+  return clean ? ('brickrewind-' + clean) : null;
+}
+
+let pendingSave = false;
+let saveDebounceTimer = null;
+let saveRetryTimer = null;
+
+// Bundel snel-opeenvolgende wijzigingen (bv. tijdens het klikken door 40 zakjes) tot één opslagactie,
+// in plaats van bij elke losse klik te bewaren — dat liep tegen de opslaglimiet (±100x/uur) aan.
+function scheduleSave(delay) {
+  pendingSave = true;
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => { saveProgress(); }, delay || 1200);
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (pendingSave) { e.preventDefault(); e.returnValue = ''; }
+});
+
+function setSaveIndicator(html, isStale) {
+  [document.getElementById('saveIndicator'), document.getElementById('saveIndicatorSticky')].forEach(el => {
+    if (!el) return;
+    el.innerHTML = html;
+    el.classList.toggle('stale', !!isStale);
+  });
+}
+
+async function saveProgress() {
+  pendingSave = false;
+  if (saveDebounceTimer) { clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
+  const key = storageKey();
+  if (!key || !totalPages) {
+    setSaveIndicator('⚠ Niet opgeslagen — vul een setnummer in bij stap 1, anders gaat je voortgang verloren.', true);
+    return;
+  }
+  try {
+    const payload = {
+      totalPages,
+      docPageCounts: pdfDocs.map(d => d.numPages),
+      setnaam: setnaamInput.value.trim(),
+      marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber })),
+      done: Array.from(doneSet),
+      lastIdx: curIdx,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+    if (saveRetryTimer) { clearTimeout(saveRetryTimer); saveRetryTimer = null; }
+    const t = new Date().toLocaleTimeString('nl-NL');
+    setSaveIndicator(
+      `✓ Opgeslagen in deze browser onder setnummer ${setnrInput.value.trim()} — laatst bijgewerkt om ${t}. ` +
+      `Veilig te sluiten.`, false
+    );
+  } catch (e) {
+    console.warn('kon voortgang niet opslaan', e);
+    pendingSave = true;
+    const msg = (e && e.message) ? e.message : 'onbekende fout';
+    setSaveIndicator(
+      `⚠ Opslaan lukte niet (${msg}). Dit kan gebeuren als je browser lokale opslag blokkeert (bv. een ` +
+      `privé-/incognitovenster, of instellingen die opslag door bestanden op je eigen computer weigeren). ` +
+      `<button type="button" class="retrySaveBtn ghost" style="margin-left:6px;">Probeer opnieuw</button>`, true
+    );
+    document.querySelectorAll('.retrySaveBtn').forEach(btn => btn.addEventListener('click', () => saveProgress()));
+  }
+}
+
+async function loadProgress() {
+  const key = storageKey();
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function clearProgress() {
+  const key = storageKey();
+  if (!key) { statusEl.textContent = 'Vul eerst een setnummer in.'; return; }
+  try {
+    localStorage.removeItem(key);
+    statusEl.textContent = 'Voortgang gewist voor set ' + setnrInput.value.trim() + '.';
+    document.getElementById('resumeBanner').style.display = 'none';
+  } catch (e) { /* niets om te wissen */ }
+}
+
+// ---------- pdf handling (multi-document aware) ----------
+loadBtn.addEventListener('click', async () => {
+  let files = [];
+  if (multiManualCheckbox.checked) {
+    files = Array.from(document.querySelectorAll('.manualFileInput')).map(inp => inp.files[0]).filter(Boolean);
+    if (!files.length) { statusEl.textContent = 'Upload minstens één handleiding-PDF.'; return; }
+  } else {
+    const f = pdfFileSingle.files[0];
+    if (!f) { statusEl.textContent = 'Kies eerst een PDF-bestand.'; return; }
+    files = [f];
+  }
+
+  loadBtn.disabled = true;
+  statusEl.textContent = `${files.length > 1 ? files.length + ' PDF\'s worden' : 'PDF wordt'} geladen…`;
+  try {
+    pdfDocs = [];
+    pageDocMap = [];
+    for (const file of files) {
+      const buf = await file.arrayBuffer();
+      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+      pdfDocs.push(doc);
+      const docIndex = pdfDocs.length - 1;
+      for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
+    }
+    totalPages = pageDocMap.length;
+    statusEl.textContent = `${totalPages} pagina's gevonden over ${pdfDocs.length} handleiding(en). Thumbnails renderen…`;
+    refreshExcludeDocSelect();
+    await buildPageGrid();
+    document.getElementById('markSection').style.display = 'block';
+    document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
+    await checkForResumableProgress();
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = 'Kon de PDF(\'s) niet lezen: ' + e.message;
+  }
+  loadBtn.disabled = false;
+});
+
+let renderCallCounter = 0;
+async function renderPageToCanvas(globalIndex, scale, cleanupAfter) {
+  const ref = pageDocMap[globalIndex - 1];
+  const doc = pdfDocs[ref.docIndex];
+  renderCallCounter++;
+  if (renderCallCounter % 25 === 0) {
+    // page.cleanup() (hieronder) ruimt alleen die ene pagina op; documentbrede caches (lettertypen,
+    // afbeeldingen) groeien over honderden unieke bezochte pagina's toch door — vandaar dit periodieke,
+    // grovere opruimmoment.
+    try { doc.cleanup(); } catch (e) { /* niet kritiek */ }
+  }
+  const page = await doc.getPage(ref.pageNumInDoc);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  if (cleanupAfter) { try { page.cleanup(); } catch (e) { /* niet kritiek */ } }
+  return canvas;
+}
+
+function errorThumbCanvas() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 90; canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#FBE3DD'; ctx.fillRect(0, 0, 90, 120);
+  ctx.fillStyle = '#D2432A'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('renderfout', 45, 55);
+  ctx.fillText('↻ proberen', 45, 70);
+  return canvas;
+}
+
+function canvasToThumbImage(canvas) {
+  // Browsers reclaim/blank out canvas bitmaps once too many live <canvas> elements exist at once
+  // (this is what caused only the last ~40 thumbnails to render on large, multi-hundred-page booklets).
+  // Converting each thumbnail to a small compressed <img> right away avoids keeping hundreds of raw
+  // canvas bitmaps alive simultaneously.
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.src = canvas.toDataURL('image/jpeg', THUMB_JPEG_QUALITY);
+  });
+}
+
+async function buildPageGrid() {
+  pageMeta = [];
+  hasFinishedNumbering = false;
+  numberingMode = false;
+  excludingMode = false;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i % 8 === 0) {
+      statusEl.textContent = `Thumbnails renderen… pagina ${i} / ${totalPages}`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    if (i % 40 === 0) {
+      // periodiek interne pdf.js-caches opruimen — vermindert geheugendruk bij grote boekjes,
+      // wat een mogelijke oorzaak was van een enkele foutief herhaalde miniatuur
+      pdfDocs.forEach(d => { try { d.cleanup(); } catch (e) { /* niet kritiek */ } });
+      await new Promise(r => setTimeout(r, 0));
+    }
+    let canvas;
+    try {
+      canvas = await renderPageToCanvas(i, THUMB_SCALE, true);
+    } catch (err) {
+      console.warn('Render mislukt voor pagina', i, err);
+      canvas = errorThumbCanvas();
+    }
+    const thumb = await canvasToThumbImage(canvas);
+    const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
+    pageMeta.push({
+      index: i, type, bagNumber: 1, docIndex: pageDocMap[i - 1].docIndex,
+      thumb, w: canvas.width, h: canvas.height
+    });
+  }
+  renumberBags();
+  statusEl.textContent = `Klaar. ${totalPages} pagina's ingeladen. Klik "Zakjes nummeren starten" en klik daarna ` +
+    `de zakje-pagina's in volgorde aan. Twijfel je aan een miniatuur? Klik het ↻-knopje erop om 'm opnieuw te ` +
+    `renderen.`;
+  renderGrid();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('pageGrid');
+  grid.innerHTML = '';
+  grid.classList.toggle('numbering-active', numberingMode);
+  grid.classList.toggle('excluding-active', excludingMode);
+  let lastDocIndex = -1;
+  pageMeta.forEach((p, i) => {
+    if (pdfDocs.length > 1 && p.docIndex !== lastDocIndex) {
+      const div = document.createElement('div');
+      div.className = 'grid-divider';
+      div.textContent = '— Handleiding ' + (p.docIndex + 1) + ' —';
+      grid.appendChild(div);
+      lastDocIndex = p.docIndex;
+    }
+    const div = document.createElement('div');
+    div.className = 'pg type-' + p.type;
+    div.appendChild(p.thumb);
+    const num = document.createElement('div');
+    num.className = 'pgnum';
+    num.textContent = 'p.' + (pageDocMap[i].pageNumInDoc);
+    div.appendChild(num);
+    if (pdfDocs.length > 1) {
+      const dl = document.createElement('div');
+      dl.className = 'doclabel';
+      dl.textContent = 'H' + (p.docIndex + 1);
+      div.appendChild(dl);
+    }
+    // Keep the grid quiet on large booklets: a bouwstap only gets a "· zakje N" label once numbering
+    // has been finished at least once. Zakje/overslaan pages always show their label — that's the
+    // useful feedback while you're actively clicking through the numbering.
+    let chipText = '';
+    if (p.type === 'bag') chipText = 'ZAKJE ' + p.bagNumber;
+    else if (p.type === 'skip') chipText = 'OVERSLAAN';
+    else if (p.type === 'step' && p.bagNumber && hasFinishedNumbering) chipText = 'zakje ' + p.bagNumber;
+    if (chipText) {
+      const chip = document.createElement('div');
+      chip.className = 'tagchip';
+      chip.textContent = chipText;
+      div.appendChild(chip);
+    }
+    const refreshBtn = document.createElement('button');
+    refreshBtn.type = 'button';
+    refreshBtn.className = 'thumb-refresh';
+    refreshBtn.title = 'Ververs deze miniatuur opnieuw vanuit de PDF';
+    refreshBtn.textContent = '↻';
+    refreshBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      refreshBtn.textContent = '…';
+      try {
+        const canvas = await renderPageToCanvas(p.index, THUMB_SCALE, true);
+        p.thumb = await canvasToThumbImage(canvas);
+        p.w = canvas.width; p.h = canvas.height;
+      } catch (err) {
+        console.warn('Handmatig verversen mislukt voor pagina', p.index, err);
+      }
+      renderGrid();
+    });
+    div.appendChild(refreshBtn);
+    div.addEventListener('click', () => cycleType(i));
+    grid.appendChild(div);
+  });
+}
+
+function cycleType(i) {
+  const p = pageMeta[i];
+
+  if (numberingMode) {
+    if (p.type === 'bag') {
+      p.type = 'step'; // klik nogmaals = ongedaan maken
+    } else {
+      const nextNum = pageMeta.filter(x => x.type === 'bag').length + 1;
+      p.type = 'bag';
+      p.bagNumber = nextNum;
+    }
+    renumberBags();
+    renderGrid();
+    updateNumberingStatus();
+    scheduleSave();
+    return;
+  }
+
+  if (excludingMode) {
+    if (p.type === 'bag') {
+      document.getElementById('excludingStatus').textContent =
+        'Dit is een zakje-pagina — gebruik "Zakjes nummeren" om die aan te passen, niet uitsluiten.';
+      return;
+    }
+    p.type = (p.type === 'skip') ? 'step' : 'skip';
+    renumberBags();
+    renderGrid();
+    scheduleSave();
+    return;
+  }
+
+  if (p.type === 'step') {
+    p.type = 'bag';
+    const prevBagNums = pageMeta.filter(x => x.type === 'bag').map(x => x.bagNumber);
+    p.bagNumber = prevBagNums.length ? Math.max(...prevBagNums) + 1 : 1;
+  } else if (p.type === 'bag') {
+    const input = prompt('Zakjenummer voor deze pagina (of leeg laten om over te slaan):', p.bagNumber);
+    if (input === null) { /* annuleren: blijft zakje */ }
+    else if (input.trim() === '') { p.type = 'skip'; }
+    else { p.bagNumber = parseInt(input, 10) || p.bagNumber; }
+  } else {
+    p.type = 'step';
+  }
+  renumberBags();
+  renderGrid();
+  scheduleSave();
+}
+
+function renumberBags() {
+  let currentBag = null; // geen zakje toegewezen totdat de eerste zakje-scheiding is gepasseerd
+  for (const p of pageMeta) {
+    if (p.type === 'bag') currentBag = p.bagNumber;
+    else if (p.type === 'step') p.bagNumber = currentBag;
+  }
+}
+
+// ---------- "zakjes nummeren" click-to-number mode + "pagina's uitsluiten" mode ----------
+const numberBagsBtn = document.getElementById('numberBagsBtn');
+const excludeBagsBtn = document.getElementById('excludeBagsBtn');
+
+function stopExcludingSilently() {
+  if (!excludingMode) return;
+  excludingMode = false;
+  excludeBagsBtn.textContent = "Pagina's uitsluiten starten";
+  excludeBagsBtn.classList.remove('active-mode');
+  document.getElementById('excludingStatus').textContent = '';
+}
+
+numberBagsBtn.addEventListener('click', () => {
+  stopExcludingSilently();
+  numberingMode = !numberingMode;
+  numberBagsBtn.textContent = numberingMode ? 'Zakjes nummeren stoppen' : 'Zakjes nummeren starten';
+  numberBagsBtn.classList.toggle('active-mode', numberingMode);
+  document.getElementById('pageGrid').classList.toggle('numbering-active', numberingMode);
+  document.getElementById('pageGrid').classList.remove('excluding-active');
+  if (!numberingMode) {
+    hasFinishedNumbering = true;
+    const bagPages = pageMeta.filter(p => p.type === 'bag');
+    statusEl.textContent = `Zakjes nummeren gestopt — ${bagPages.length} zakje(s) gemarkeerd, bewaard.`;
+    renderGrid();
+    saveProgress();
+  } else {
+    renderGrid();
+  }
+  updateNumberingStatus();
+});
+
+function updateNumberingStatus() {
+  const el = document.getElementById('numberingStatus');
+  if (!numberingMode) { el.textContent = ''; return; }
+  const nextNum = pageMeta.filter(p => p.type === 'bag').length + 1;
+  el.textContent = `Actief — klik de miniatuur van zakje ${nextNum} aan. (Nogmaals klikken op een gemarkeerde pagina maakt 'm ongedaan.)`;
+}
+
+excludeBagsBtn.addEventListener('click', () => {
+  if (numberingMode) {
+    numberingMode = false;
+    numberBagsBtn.textContent = 'Zakjes nummeren starten';
+    numberBagsBtn.classList.remove('active-mode');
+    hasFinishedNumbering = true;
+  }
+  excludingMode = !excludingMode;
+  excludeBagsBtn.textContent = excludingMode ? "Pagina's uitsluiten stoppen" : "Pagina's uitsluiten starten";
+  excludeBagsBtn.classList.toggle('active-mode', excludingMode);
+  document.getElementById('pageGrid').classList.toggle('excluding-active', excludingMode);
+  document.getElementById('pageGrid').classList.remove('numbering-active');
+  document.getElementById('excludingStatus').textContent = excludingMode
+    ? 'Actief — klik elke pagina aan die je wilt uitsluiten. Nogmaals klikken maakt het ongedaan.'
+    : '';
+  if (!excludingMode) {
+    const skipped = pageMeta.filter(p => p.type === 'skip').length;
+    statusEl.textContent = `Uitsluiten gestopt — ${skipped} pagina('s) staan nu op "overslaan", bewaard.`;
+    saveProgress();
+  }
+  renderGrid();
+  updateNumberingStatus();
+});
+
+function refreshExcludeDocSelect() {
+  const field = document.getElementById('excludeDocField');
+  const sel = document.getElementById('excludeDocSelect');
+  sel.innerHTML = '';
+  if (pdfDocs.length > 1) {
+    field.style.display = '';
+    pdfDocs.forEach((d, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx + 1;
+      opt.textContent = 'Handleiding ' + (idx + 1);
+      sel.appendChild(opt);
+    });
+  } else {
+    field.style.display = 'none';
+  }
+}
+
+let excludeRangeLog = [];
+
+function renderExcludeRangeStatus(errorMsg) {
+  const el = document.getElementById('excludeRangeStatus');
+  let html = '';
+  if (errorMsg) html += `<div style="color:var(--brick-red);">${errorMsg}</div>`;
+  excludeRangeLog.forEach(line => { html += `<div style="color:var(--bag-teal);">✓ ${line}</div>`; });
+  el.innerHTML = html;
+}
+
+document.getElementById('applyExcludeRangeBtn').addEventListener('click', () => {
+  if (!pageMeta.length) return;
+  const fromRaw = document.getElementById('excludeFrom').value.trim();
+  const toRaw = document.getElementById('excludeTo').value.trim();
+  const docSel = pdfDocs.length > 1 ? parseInt(document.getElementById('excludeDocSelect').value, 10) : 1;
+  const from = parseInt(fromRaw, 10);
+  const to = parseInt(toRaw, 10);
+  if (!fromRaw || !toRaw || isNaN(from) || isNaN(to) || from < 1 || to < from) {
+    renderExcludeRangeStatus('Vul zowel "van" als "tot en met" in met geldige paginanummers (van ≤ tot). ' +
+      'Let op: de cijfers in de vakjes zijn alleen een voorbeeld (placeholder), geen ingevulde waarde.');
+    return;
+  }
+  let count = 0;
+  pageMeta.forEach((p, i) => {
+    const ref = pageDocMap[i];
+    if (ref.docIndex === (docSel - 1) && ref.pageNumInDoc >= from && ref.pageNumInDoc <= to && p.type !== 'bag') {
+      p.type = 'skip';
+      count++;
+    }
+  });
+  renumberBags();
+  renderGrid();
+  saveProgress();
+  if (count > 0) {
+    excludeRangeLog.push(`${count} pagina('s) uitgesloten (handleiding ${docSel}, p.${from}–${to}).`);
+    renderExcludeRangeStatus();
+  } else {
+    renderExcludeRangeStatus(`Geen pagina's aangepast voor handleiding ${docSel}, p.${from}–${to} — controleer het ` +
+      `bereik (zakje-pagina's worden hier nooit door overschreven).`);
+  }
+});
+
+document.getElementById('clearProgressBtn').addEventListener('click', clearProgress);
+
+async function generateReversedSteps() {
+  renumberBags();
+  const steps = pageMeta.filter(p => p.type === 'step' && p.bagNumber); // bagNumber leeg = hoort nog bij geen enkel zakje
+  if (!steps.length) {
+    alert('Geen bouwstappen gevonden — controleer je markeringen in stap 2.');
+    return false;
+  }
+  const bags = {};
+  const bagOrder = [];
+  steps.forEach(s => {
+    if (!bags[s.bagNumber]) { bags[s.bagNumber] = []; bagOrder.push(s.bagNumber); }
+    bags[s.bagNumber].push(s);
+  });
+  reversedSteps = [];
+  [...bagOrder].reverse().forEach(bagNum => {
+    [...bags[bagNum]].reverse().forEach(s => reversedSteps.push(s));
+  });
+  return true;
+}
+
+async function showViewer(startIdx) {
+  document.body.classList.add('viewer-focus');
+  document.getElementById('viewer').style.display = 'block';
+  document.getElementById('totStep').textContent = reversedSteps.length;
+  const setnr = setnrInput.value.trim();
+  const setnaam = setnaamInput.value.trim();
+  document.getElementById('viewerTitle').textContent =
+    [setnaam, setnr ? ('set ' + setnr) : ''].filter(Boolean).join(' — ') || 'Demontagegids';
+  buildFilmstrip();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  await renderStep(Math.min(Math.max(startIdx || 0, 0), reversedSteps.length - 1));
+}
+
+document.getElementById('exitFocusBtn').addEventListener('click', () => {
+  document.body.classList.remove('viewer-focus');
+  document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
+});
+
+function buildFilmstrip() {
+  const strip = document.getElementById('filmstrip');
+  strip.innerHTML = '';
+  reversedSteps.forEach((s, i) => {
+    const isStart = (i === 0) || (reversedSteps[i - 1].bagNumber !== s.bagNumber);
+    const isEnd = (i === reversedSteps.length - 1) || (reversedSteps[i + 1].bagNumber !== s.bagNumber);
+    const div = document.createElement('div');
+    div.className = 'f' + (doneSet.has(s.index) ? ' done' : '') + (isStart ? ' bag-start' : '') + (isEnd ? ' bag-end' : '');
+    div.addEventListener('click', () => renderStep(i));
+    strip.appendChild(div);
+    // miniatuur lazy laden zodra ze in beeld komen, i.p.v. alles vooraf
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        obs.disconnect();
+        renderPageToCanvas(s.index, 0.18, false).then(canvas => {
+          const img = document.createElement('img');
+          img.src = canvas.toDataURL('image/jpeg', 0.55);
+          div.appendChild(img);
+        }).catch(() => {});
+      });
+    }, { root: strip, threshold: 0.05 });
+    obs.observe(div);
+  });
+  updateFilmstripActive();
+}
+
+function updateFilmstripActive() {
+  document.querySelectorAll('#filmstrip .f').forEach((el, idx) => {
+    el.classList.toggle('active', idx === curIdx);
+    el.classList.toggle('done', doneSet.has(reversedSteps[idx].index));
+  });
+  const activeThumb = document.querySelectorAll('#filmstrip .f')[curIdx];
+  if (activeThumb) activeThumb.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+}
+
+function updateDoneUI() {
+  const s = reversedSteps[curIdx];
+  const isDone = doneSet.has(s.index);
+  const btn = document.getElementById('doneBtn');
+  btn.textContent = isDone ? '✓ Stap afgerond (klik om ongedaan te maken)' : '✓ Markeer deze stap als klaar';
+  btn.classList.toggle('is-done', isDone);
+  document.getElementById('doneCount').textContent = doneSet.size + ' van ' + reversedSteps.length + ' afgerond';
+  updateFilmstripActive();
+}
+
+document.getElementById('doneBtn').addEventListener('click', () => {
+  const s = reversedSteps[curIdx];
+  if (doneSet.has(s.index)) doneSet.delete(s.index); else doneSet.add(s.index);
+  updateDoneUI();
+  scheduleSave(600);
+  if (doneSet.has(s.index) && curIdx < reversedSteps.length - 1) renderStep(curIdx + 1);
+});
+
+async function renderStep(i) {
+  curIdx = i;
+  const s = reversedSteps[i];
+  const requestId = ++renderStep._req;
+
+  const stageImg = document.getElementById('stageImg');
+  const stageLoading = document.getElementById('stageLoading');
+  stageImg.style.display = 'none';
+  stageLoading.style.display = 'flex';
+  stageLoading.textContent = 'Bouwstap laden…';
+
+  document.getElementById('curStep').textContent = i + 1;
+  document.getElementById('bagTag').textContent = '→ terug in zakje ' + s.bagNumber;
+  document.getElementById('progressBar').style.width = Math.round(((i + 1) / reversedSteps.length) * 100) + '%';
+
+  const nextS = reversedSteps[i + 1];
+  const bagChangeNote = (!nextS || nextS.bagNumber !== s.bagNumber)
+    ? ` Dit is de laatste stap van zakje ${s.bagNumber} — leg dat zakje na deze stap helemaal terug.`
+    : '';
+  const pageNumInDoc = pageDocMap[s.index - 1].pageNumInDoc;
+  const pageRef = pdfDocs.length > 1
+    ? `handleiding ${s.docIndex + 1}, pagina ${pageNumInDoc}`
+    : `pagina ${pageNumInDoc}`;
+  const setnr = setnrInput.value.trim();
+  const setnaam = setnaamInput.value.trim();
+  const setLabel = [setnaam, setnr ? ('(' + setnr + ')') : ''].filter(Boolean).join(' ');
+
+  document.getElementById('instructionText').innerHTML =
+    `Zie <b>${pageRef}</b>${setLabel ? ' van ' + setLabel : ''} hierboven. Haal de onderdelen die in déze stap ` +
+    `oorspronkelijk werden toegevoegd los van het model, en leg ze terug in <b>zakje ${s.bagNumber}</b>.${bagChangeNote}`;
+
+  updateDoneUI();
+  document.getElementById('prevBtn').disabled = i === 0;
+  document.getElementById('nextBtn').disabled = i === reversedSteps.length - 1;
+  scheduleSave(600);
+
+  try {
+    const canvas = await renderPageToCanvas(s.index, 0.95, false);
+    if (requestId !== renderStep._req) return; // ondertussen alweer naar een andere stap genavigeerd
+    stageImg.src = canvas.toDataURL('image/jpeg', 0.82);
+    stageImg.style.display = 'block';
+    stageLoading.style.display = 'none';
+  } catch (err) {
+    if (requestId !== renderStep._req) return;
+    stageLoading.innerHTML =
+      '⚠ Kon deze pagina niet laden (' + err.message + ').<br>' +
+      '<button type="button" id="retryStepBtn" style="margin-top:10px;">Opnieuw proberen</button>';
+    const retryBtn = document.getElementById('retryStepBtn');
+    if (retryBtn) retryBtn.addEventListener('click', () => renderStep(i));
+  }
+}
+renderStep._req = 0;
+
+document.getElementById('prevBtn').addEventListener('click', () => { if (curIdx > 0) renderStep(curIdx - 1); });
+document.getElementById('nextBtn').addEventListener('click', () => { if (curIdx < reversedSteps.length - 1) renderStep(curIdx + 1); });
+
+document.getElementById('generateBtn').addEventListener('click', async () => {
+  if (!setnrInput.value.trim()) {
+    alert('Vul eerst een setnummer in (stap 1, bovenaan). Zonder setnummer kan BrickRewind je voortgang niet ' +
+      'opslaan, en ben je alles kwijt zodra je dit tabblad sluit.');
+    setnrInput.focus();
+    setnrInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  doneSet = new Set();
+  if (await generateReversedSteps()) { await showViewer(0); saveProgress(); }
+});
+
+// ---------- resume flow ----------
+let pendingResume = null;
+
+async function checkForResumableProgress() {
+  const saved = await loadProgress();
+  const banner = document.getElementById('resumeBanner');
+  const sameShape = saved && saved.totalPages === totalPages &&
+    JSON.stringify(saved.docPageCounts || []) === JSON.stringify(pdfDocs.map(d => d.numPages));
+  if (sameShape) {
+    pendingResume = saved;
+    const when = new Date(saved.savedAt).toLocaleString('nl-NL');
+    document.getElementById('resumeText').textContent =
+      `Opgeslagen op ${when}${saved.setnaam ? ' voor ' + saved.setnaam : ''} — ${saved.done.length} stap(pen) ` +
+      `al afgerond. Zelfde PDF('s) gedetecteerd (${saved.totalPages} pagina's).`;
+    banner.style.display = 'block';
+    if (saved.setnaam && !setnaamInput.value.trim()) setnaamInput.value = saved.setnaam;
+  } else {
+    banner.style.display = 'none';
+    pendingResume = null;
+  }
+}
+
+document.getElementById('resumeIgnoreBtn').addEventListener('click', () => {
+  document.getElementById('resumeBanner').style.display = 'none';
+  pendingResume = null;
+});
+
+document.getElementById('resumeContinueBtn').addEventListener('click', async () => {
+  if (!pendingResume) return;
+  const map = new Map(pendingResume.marks.map(m => [m.i, m]));
+  pageMeta.forEach(p => {
+    const m = map.get(p.index);
+    if (m) { p.type = m.t; p.bagNumber = m.b; }
+  });
+  hasFinishedNumbering = true;
+  renderGrid();
+  if (await generateReversedSteps()) {
+    doneSet = new Set(pendingResume.done || []);
+    await showViewer(pendingResume.lastIdx || 0);
+  }
+  document.getElementById('resumeBanner').style.display = 'none';
+  statusEl.textContent = 'Voortgang hersteld.';
+});
+
+// ---------- PWA: service worker registreren (offline gebruik + installeerbaar) ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('Service worker registratie mislukt:', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
