@@ -370,15 +370,34 @@
     .intro-center, .intro-piece{animation:none; opacity:1;}
   }
 
-  /* --- Sectie 1: hero-kop met decoratieve blokjes + pilvormige zoekbalk (Builder-app-taal, eigen vormen) --- */
-  .hero-top{position:relative; overflow:hidden; border-radius:10px; margin:-2px -4px 0; padding:2px 4px 4px;}
+  /* --- Sectie 1: Builder-stijl kopvlak (kleurvlak + zwevende blokjes + merkje) + pilvormige zoekbalk --- */
+  .hero-panel{
+    position:relative; overflow:hidden;
+    background: radial-gradient(circle at 15% 0%, #2E3856 0%, transparent 55%), linear-gradient(160deg, #232C42 0%, var(--ink) 55%, #12172a 100%);
+    margin:-20px -22px 20px; padding:30px 22px 26px;
+    border-radius:14px 14px 20px 20px;
+    color:var(--paper); text-align:center;
+  }
+  .hero-panel .step-eyebrow{color:var(--stud-yellow); justify-content:center; position:relative; z-index:1;}
+  .hero-panel .step-eyebrow .num{background:var(--stud-yellow); color:var(--ink);}
+  .hero-panel h2{color:var(--paper); position:relative; z-index:1;}
+  .hero-panel p.hint{color:#AEB7D1; margin:0; position:relative; z-index:1; max-width:440px; margin-left:auto; margin-right:auto;}
+  .hero-panel-mark{
+    width:44px; height:44px; border-radius:11px; background:var(--stud-yellow);
+    border:3px solid var(--paper); position:relative; margin:0 auto 16px; z-index:1;
+  }
+  .hero-panel-mark::after{
+    content:""; position:absolute; top:-11px; left:50%; transform:translateX(-50%);
+    width:18px; height:11px; background:var(--stud-yellow); border:3px solid var(--paper);
+    border-bottom:none; border-radius:6px 6px 0 0;
+  }
   .hero-deco{position:absolute; inset:0; pointer-events:none; z-index:0;}
-  .hero-deco .hp{position:absolute; border-radius:7px; opacity:.10;}
-  .hero-deco .h1{width:52px; height:52px; background:var(--brick-red); top:-14px; right:8%; transform:rotate(14deg);}
-  .hero-deco .h2{width:30px; height:30px; border-radius:50%; background:var(--bag-teal); top:34px; right:22%;}
-  .hero-deco .h3{width:34px; height:34px; background:var(--stud-yellow); top:6px; right:2%; transform:rotate(-10deg);}
-  .hero-deco .h4{width:20px; height:20px; border-radius:50%; background:var(--amber); top:56px; right:6%;}
-  .hero-top .step-eyebrow, .hero-top h2, .hero-top p.hint{position:relative; z-index:1;}
+  .hero-deco .hp{position:absolute; border-radius:8px; opacity:.5;}
+  .hero-deco .h1{width:64px; height:64px; background:var(--brick-red); top:-20px; left:6%; transform:rotate(16deg);}
+  .hero-deco .h2{width:34px; height:34px; border-radius:50%; background:var(--bag-teal); bottom:-10px; left:16%;}
+  .hero-deco .h3{width:44px; height:44px; background:var(--amber); top:10px; right:5%; transform:rotate(-12deg);}
+  .hero-deco .h4{width:24px; height:24px; border-radius:50%; background:var(--stud-yellow); bottom:14px; right:16%; opacity:.7;}
+  .hero-deco .h5{width:18px; height:18px; background:var(--paper); opacity:.18; top:44%; right:30%; border-radius:5px;}
 
   .search-pill{
     display:flex; align-items:center; gap:10px; background:var(--paper);
@@ -401,6 +420,26 @@
     .search-pill-divider{display:none;}
     .search-pill-btn{flex:1 1 100%;}
   }
+
+  /* Sectie 1: info-tegels op de plek waar de Builder-app twee promo-foto's toont — hier onze eigen uitleg */
+  .info-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin:18px 0 4px;}
+  .info-card{
+    position:relative; overflow:hidden; border-radius:12px; padding:16px 16px 18px;
+    color:var(--paper); min-height:112px; display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .info-card::after{
+    content:""; position:absolute; width:100px; height:100px; border-radius:50%;
+    background:rgba(255,255,255,.14); top:-36px; right:-24px;
+  }
+  .info-card.card-red{background:linear-gradient(155deg, #E9634A 0%, var(--brick-red) 60%, #8f2c1b 100%);}
+  .info-card.card-teal{background:linear-gradient(155deg, #33AF9B 0%, var(--bag-teal) 60%, #103430 100%);}
+  .info-card.card-amber{background:linear-gradient(155deg, #E6A24C 0%, var(--amber) 60%, #6e3f0f 100%);}
+  .info-card-title{
+    font-family:var(--display); font-size:13.5px; text-transform:uppercase; letter-spacing:.01em;
+    margin-bottom:6px; position:relative; z-index:1;
+  }
+  .info-card-text{font-size:12px; line-height:1.5; position:relative; z-index:1; color:rgba(255,255,255,.94);}
+  .info-card-text a{color:#fff;}
 
 </style>
 </head>
@@ -434,22 +473,18 @@
   <div id="storageWarning" style="display:none; background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:13.5px; line-height:1.5;"></div>
 
   <section>
-    <div class="hero-top">
+    <div class="hero-panel">
       <div class="hero-deco" aria-hidden="true">
         <span class="hp h1"></span>
         <span class="hp h2"></span>
         <span class="hp h3"></span>
         <span class="hp h4"></span>
+        <span class="hp h5"></span>
       </div>
+      <div class="hero-panel-mark"></div>
       <div class="step-eyebrow"><span class="num">1</span> Set &amp; instructieboekje</div>
       <h2>Vul je set in en upload de officiële PDF('s)</h2>
-      <p class="hint">
-        BrickRewind kan een LEGO-instructie-PDF niet automatisch downloaden bij LEGO vandaan — daar is geen
-        openbare koppeling voor. Zoek je set op bij
-        <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>,
-        download de PDF('s) en upload ze hieronder. Alles blijft in je browser; er wordt niets verstuurd of ergens
-        automatisch opgezocht.
-      </p>
+      <p class="hint">Zoek je setnummer op en upload de officiële LEGO-PDF — alles blijft in je eigen browser.</p>
     </div>
 
     <div class="search-pill">
@@ -461,32 +496,44 @@
     <div id="setSuggestions" class="set-suggestions" style="display:none;"></div>
     <div id="setLookupResult" class="set-lookup-result" style="display:none;"></div>
 
-    <div class="row" style="margin-top:16px;">
+    <div class="info-cards">
+      <div class="info-card card-red">
+        <div class="info-card-title">PDF ophalen</div>
+        <div class="info-card-text">
+          Geen automatische download — daar is geen openbare koppeling voor. Zoek je set op bij
+          <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>
+          en upload de PDF('s) hieronder.
+        </div>
+      </div>
+      <div class="info-card card-teal">
+        <div class="info-card-title">Voortgang &amp; herkenning</div>
+        <div class="info-card-text">
+          Setnummer en -naam herkennen je voortgang als je later terugkomt. Alles wordt bewaard in déze
+          browser op dit apparaat — niet online, en niet op een ander toestel beschikbaar.
+        </div>
+      </div>
+      <div class="info-card card-amber">
+        <div class="info-card-title">Automatisch invullen</div>
+        <div class="info-card-text">
+          <b>Experimenteel.</b> Vul je gratis <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">Rebrickable-sleutel</a>
+          hieronder in, dan komen naam en foto vanzelf mee terwijl je typt.
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:4px;">
       <div class="field" style="flex:1;">
         <label for="setnaam">Setnaam (optioneel — vult zich vaak vanzelf)</label>
         <input type="text" id="setnaam" class="wide" style="width:100%;" placeholder="bv. WALL-E" autocomplete="off">
       </div>
     </div>
-    <p class="hint" style="margin-top:8px;">
-      Setnummer en -naam worden ook gebruikt om je voortgang te herkennen als je later terugkomt (stap 2
-      hieronder) en om in de instructieteksten te tonen. Die voortgang wordt bewaard in déze browser op dit
-      apparaat (niet online) — open je BrickRewind later op een andere computer of in een andere browser, dan moet
-      je opnieuw beginnen.
-    </p>
 
-    <div class="row" style="align-items:flex-end;">
+    <div class="row" style="align-items:flex-end; margin-top:12px;">
       <div class="field" style="flex:1;">
         <label for="rebrickableKey">Rebrickable API-sleutel (optioneel)</label>
         <input type="text" id="rebrickableKey" class="wide" style="width:100%;" placeholder="plak hier je gratis sleutel">
       </div>
     </div>
-    <p class="hint" style="margin-top:6px;">
-      <b>Experimenteel.</b> Vul hierboven je eigen gratis Rebrickable API-sleutel in
-      (aan te maken via <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">rebrickable.com/api</a>)
-      — daarna komen setnummer, setnaam en foto automatisch op dezelfde rij terwijl je typt in het
-      keuzemenu hieronder. Je sleutel wordt daarna in deze browser onthouden, zodat je 'm niet
-      steeds opnieuw hoeft in te vullen.
-    </p>
 
     <div class="row" style="margin-top:4px;">
       <div class="field" id="singleFileRow" style="flex:1;">
