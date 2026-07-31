@@ -370,6 +370,38 @@
     .intro-center, .intro-piece{animation:none; opacity:1;}
   }
 
+  /* --- Sectie 1: hero-kop met decoratieve blokjes + pilvormige zoekbalk (Builder-app-taal, eigen vormen) --- */
+  .hero-top{position:relative; overflow:hidden; border-radius:10px; margin:-2px -4px 0; padding:2px 4px 4px;}
+  .hero-deco{position:absolute; inset:0; pointer-events:none; z-index:0;}
+  .hero-deco .hp{position:absolute; border-radius:7px; opacity:.10;}
+  .hero-deco .h1{width:52px; height:52px; background:var(--brick-red); top:-14px; right:8%; transform:rotate(14deg);}
+  .hero-deco .h2{width:30px; height:30px; border-radius:50%; background:var(--bag-teal); top:34px; right:22%;}
+  .hero-deco .h3{width:34px; height:34px; background:var(--stud-yellow); top:6px; right:2%; transform:rotate(-10deg);}
+  .hero-deco .h4{width:20px; height:20px; border-radius:50%; background:var(--amber); top:56px; right:6%;}
+  .hero-top .step-eyebrow, .hero-top h2, .hero-top p.hint{position:relative; z-index:1;}
+
+  .search-pill{
+    display:flex; align-items:center; gap:10px; background:var(--paper);
+    border:2px solid var(--ink); border-radius:999px; padding:6px 6px 6px 18px;
+    margin:16px 0 6px; box-shadow:0 2px 0 rgba(28,35,51,.10);
+  }
+  .search-pill svg{flex:none; color:var(--ink-soft);}
+  .search-pill input[type=text]{
+    flex:1; min-width:0; width:auto; border:none; background:transparent;
+    font-family:var(--mono); font-size:15px; padding:10px 4px;
+  }
+  .search-pill input[type=text]:focus{outline:none;}
+  .search-pill-divider{width:1px; align-self:stretch; background:var(--line); flex:none;}
+  .search-pill-btn{
+    border-radius:999px; padding:11px 20px; margin:0; flex:none; white-space:nowrap;
+  }
+  @media (max-width:520px){
+    .search-pill{flex-wrap:wrap; border-radius:16px; padding:12px;}
+    .search-pill input[type=text]{flex:1 1 100%; padding:6px 4px;}
+    .search-pill-divider{display:none;}
+    .search-pill-btn{flex:1 1 100%;}
+  }
+
 </style>
 </head>
 <body>
@@ -402,15 +434,46 @@
   <div id="storageWarning" style="display:none; background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:13.5px; line-height:1.5;"></div>
 
   <section>
-    <div class="step-eyebrow"><span class="num">1</span> Set &amp; instructieboekje</div>
-    <h2>Vul je set in en upload de officiële PDF('s)</h2>
-    <p class="hint">
-      BrickRewind kan een LEGO-instructie-PDF niet automatisch downloaden bij LEGO vandaan — daar is geen
-      openbare koppeling voor. Zoek je set op bij
-      <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>,
-      download de PDF('s) en upload ze hieronder. Alles blijft in je browser; er wordt niets verstuurd of ergens
-      automatisch opgezocht.
+    <div class="hero-top">
+      <div class="hero-deco" aria-hidden="true">
+        <span class="hp h1"></span>
+        <span class="hp h2"></span>
+        <span class="hp h3"></span>
+        <span class="hp h4"></span>
+      </div>
+      <div class="step-eyebrow"><span class="num">1</span> Set &amp; instructieboekje</div>
+      <h2>Vul je set in en upload de officiële PDF('s)</h2>
+      <p class="hint">
+        BrickRewind kan een LEGO-instructie-PDF niet automatisch downloaden bij LEGO vandaan — daar is geen
+        openbare koppeling voor. Zoek je set op bij
+        <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>,
+        download de PDF('s) en upload ze hieronder. Alles blijft in je browser; er wordt niets verstuurd of ergens
+        automatisch opgezocht.
+      </p>
+    </div>
+
+    <div class="search-pill">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+      <input type="text" id="setnr" placeholder="Setnummer, bv. 43279" autocomplete="off">
+      <span class="search-pill-divider"></span>
+      <button class="search-pill-btn" id="lookupSetBtn" type="button">Zoek set op</button>
+    </div>
+    <div id="setSuggestions" class="set-suggestions" style="display:none;"></div>
+    <div id="setLookupResult" class="set-lookup-result" style="display:none;"></div>
+
+    <div class="row" style="margin-top:16px;">
+      <div class="field" style="flex:1;">
+        <label for="setnaam">Setnaam (optioneel — vult zich vaak vanzelf)</label>
+        <input type="text" id="setnaam" class="wide" style="width:100%;" placeholder="bv. WALL-E" autocomplete="off">
+      </div>
+    </div>
+    <p class="hint" style="margin-top:8px;">
+      Setnummer en -naam worden ook gebruikt om je voortgang te herkennen als je later terugkomt (stap 2
+      hieronder) en om in de instructieteksten te tonen. Die voortgang wordt bewaard in déze browser op dit
+      apparaat (niet online) — open je BrickRewind later op een andere computer of in een andere browser, dan moet
+      je opnieuw beginnen.
     </p>
+
     <div class="row" style="align-items:flex-end;">
       <div class="field" style="flex:1;">
         <label for="rebrickableKey">Rebrickable API-sleutel (optioneel)</label>
@@ -424,26 +487,6 @@
       keuzemenu hieronder. Je sleutel wordt daarna in deze browser onthouden, zodat je 'm niet
       steeds opnieuw hoeft in te vullen.
     </p>
-
-    <div class="row">
-      <div class="field" style="position:relative;">
-        <label for="setnr">Setnummer</label>
-        <input type="text" id="setnr" placeholder="bv. 43279" autocomplete="off">
-      </div>
-      <div class="field" style="position:relative; flex:1;">
-        <label for="setnaam">Setnaam</label>
-        <input type="text" id="setnaam" class="wide" style="width:100%;" placeholder="bv. WALL-E" autocomplete="off">
-      </div>
-      <button class="ghost" id="lookupSetBtn" type="button">Zoek set op</button>
-    </div>
-    <div id="setSuggestions" class="set-suggestions" style="display:none;"></div>
-    <p class="hint" style="margin-top:8px;">
-      Setnummer en -naam worden ook gebruikt om je voortgang te herkennen als je later terugkomt (stap 2
-      hieronder) en om in de instructieteksten te tonen. Die voortgang wordt bewaard in déze browser op dit
-      apparaat (niet online) — open je BrickRewind later op een andere computer of in een andere browser, dan moet
-      je opnieuw beginnen.
-    </p>
-    <div id="setLookupResult" class="set-lookup-result" style="display:none;"></div>
 
     <div class="row" style="margin-top:4px;">
       <div class="field" id="singleFileRow" style="flex:1;">
