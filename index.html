@@ -309,9 +309,82 @@
   body.viewer-focus header{margin-bottom:10px;}
 
   footer{text-align:center; margin-top:30px; font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
+  /* --- Openingsmoment (splash), zie screenshot-analyse: kleurvlak + zwevende blokjes + logo/wordmark --- */
+  #introSplash{
+    position:fixed; inset:0; z-index:9999;
+    background:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    animation: introFadeOut 0.5s ease-in forwards;
+    animation-delay: 1.5s;
+  }
+  #introSplash.intro-skip{animation-duration:0.25s; animation-delay:0s;}
+  @keyframes introFadeOut{
+    to{opacity:0; visibility:hidden; pointer-events:none;}
+  }
+
+  .intro-center{position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center;
+    opacity:0; animation: introCenterIn 0.6s ease-out 0.35s forwards;}
+  @keyframes introCenterIn{ from{opacity:0; transform:translateY(10px) scale(.96);} to{opacity:1; transform:none;} }
+
+  .intro-mark{
+    width:64px; height:64px; border-radius:14px; background:var(--stud-yellow);
+    border:4px solid var(--paper); position:relative; margin-bottom:18px;
+  }
+  .intro-mark::after{
+    content:""; position:absolute; top:-15px; left:50%; transform:translateX(-50%);
+    width:26px; height:15px; background:var(--stud-yellow); border:4px solid var(--paper);
+    border-bottom:none; border-radius:8px 8px 0 0;
+  }
+  .intro-word{font-family:var(--display); font-size:30px; letter-spacing:-.01em; text-transform:uppercase; color:var(--paper);}
+  .intro-tag{font-family:var(--mono); font-size:12px; letter-spacing:.04em; color:#9AA3BC; margin-top:6px;}
+
+  /* Zwevende blokjes, elk met eigen kleur/vorm/pad, vallen in en drijven daarna licht — geen LEGO-merkvorm, eigen taal */
+  .intro-piece{
+    position:absolute; z-index:1; opacity:0; border-radius:6px;
+    animation: introDropIn 0.7s cubic-bezier(.2,.9,.3,1.2) forwards, introDrift 4.5s ease-in-out infinite;
+  }
+  .p1{ width:46px; height:46px; background:var(--brick-red); top:20%; left:18%;
+    animation-delay:0s, 0.9s; }
+  .p2{ width:30px; height:30px; border-radius:50%; background:var(--bag-teal); top:64%; left:22%;
+    animation-delay:0.12s, 1.0s; }
+  .p3{ width:38px; height:38px; background:var(--amber); top:18%; right:20%; transform:rotate(18deg);
+    animation-delay:0.22s, 1.1s; }
+  .p4{ width:26px; height:26px; border-radius:50%; background:var(--stud-yellow); top:70%; right:24%;
+    animation-delay:0.3s, 1.2s; }
+  .p5{ width:20px; height:20px; background:var(--paper); opacity:.5; top:42%; left:8%; border-radius:5px;
+    animation-delay:0.4s, 1.3s; }
+
+  @keyframes introDropIn{
+    from{opacity:0; transform:translateY(-26px) scale(.6);}
+    60%{opacity:1;}
+    to{opacity:.9; transform:translateY(0) scale(1);}
+  }
+  @keyframes introDrift{
+    0%,100%{ margin-top:0; }
+    50%{ margin-top:-8px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #introSplash{animation-delay:0.4s;}
+    .intro-center, .intro-piece{animation:none; opacity:1;}
+  }
+
 </style>
 </head>
 <body>
+<div id="introSplash" role="presentation" aria-hidden="true">
+  <div class="intro-piece p1"></div>
+  <div class="intro-piece p2"></div>
+  <div class="intro-piece p3"></div>
+  <div class="intro-piece p4"></div>
+  <div class="intro-piece p5"></div>
+  <div class="intro-center">
+    <div class="intro-mark"></div>
+    <div class="intro-word">BrickRewind</div>
+    <div class="intro-tag">// terug naar het zakje</div>
+  </div>
+</div>
 <div class="wrap">
 
   <header>
@@ -345,10 +418,11 @@
       </div>
     </div>
     <p class="hint" style="margin-top:6px;">
-      <b>Experimenteel.</b> Er staat een Rebrickable-sleutel vooringevuld; terwijl je typt in het keuzemenu
-      hieronder komen setnummer, setnaam en foto automatisch op dezelfde rij. Wil je je eigen sleutel gebruiken
-      (aan te maken via <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">rebrickable.com/api</a>),
-      vervang de tekst hierboven dan — die wordt daarna in deze browser onthouden.
+      <b>Experimenteel.</b> Vul hierboven je eigen gratis Rebrickable API-sleutel in
+      (aan te maken via <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">rebrickable.com/api</a>)
+      — daarna komen setnummer, setnaam en foto automatisch op dezelfde rij terwijl je typt in het
+      keuzemenu hieronder. Je sleutel wordt daarna in deze browser onthouden, zodat je 'm niet
+      steeds opnieuw hoeft in te vullen.
     </p>
 
     <div class="row">
@@ -528,9 +602,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 const VERSION = "0.18";
 const THUMB_SCALE = 0.22;
 const THUMB_JPEG_QUALITY = 0.7;
-// Standaard Rebrickable-sleutel van Dirk van Delft; wordt bij een wijziging onthouden in deze browser,
-// zodat een andere gebruiker van dit bestand ook zijn/haar eigen sleutel kan invullen en die blijft staan.
-const DEFAULT_REBRICKABLE_KEY = "581e3346a98d6c4022c914169dde6c36";
+// Geen standaard sleutel meer vooringevuld (die stond eerder hardcoded in de broncode,
+// wat een probleem is zodra dit bestand op een publieke plek zoals GitHub Pages staat).
+// Elke gebruiker vult hier zijn/haar eigen gratis Rebrickable-sleutel in; die wordt
+// daarna lokaal in de browser onthouden.
+const DEFAULT_REBRICKABLE_KEY = "";
 const REBRICKABLE_KEY_STORAGE = "brickrewind-rebrickable-key";
 
 let pdfDocs = [];        // pdf.js document objects, in booklet order
@@ -1403,6 +1479,22 @@ document.getElementById('resumeContinueBtn').addEventListener('click', async () 
   document.getElementById('resumeBanner').style.display = 'none';
   statusEl.textContent = 'Voortgang hersteld.';
 });
+
+// ---------- Openingsmoment: tik om over te slaan, daarna helemaal opruimen ----------
+(function initIntroSplash() {
+  const splash = document.getElementById('introSplash');
+  if (!splash) return;
+  const remove = () => { splash.remove(); };
+  splash.addEventListener('click', () => {
+    splash.classList.add('intro-skip');
+    splash.addEventListener('animationend', remove, { once: true });
+  });
+  splash.addEventListener('animationend', (e) => {
+    if (e.target === splash) remove();
+  });
+  // Vangnet: als animaties om wat voor reden dan ook niet vuren, toch opruimen.
+  setTimeout(remove, 2600);
+})();
 
 // ---------- PWA: service worker registreren (offline gebruik + installeerbaar) ----------
 if ('serviceWorker' in navigator) {
