@@ -316,7 +316,7 @@
     display:flex; align-items:center; justify-content:center;
     overflow:hidden;
     animation: introFadeOut 0.5s ease-in forwards;
-    animation-delay: 1.5s;
+    animation-delay: 5s;
   }
   #introSplash.intro-skip{animation-duration:0.25s; animation-delay:0s;}
   @keyframes introFadeOut{
@@ -1493,7 +1493,7 @@ document.getElementById('resumeContinueBtn').addEventListener('click', async () 
     if (e.target === splash) remove();
   });
   // Vangnet: als animaties om wat voor reden dan ook niet vuren, toch opruimen.
-  setTimeout(remove, 2600);
+  setTimeout(remove, 6000);
 })();
 
 // ---------- PWA: service worker registreren (offline gebruik + installeerbaar) ----------
