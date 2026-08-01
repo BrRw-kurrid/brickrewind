@@ -694,9 +694,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 const VERSION = "0.18";
 const THUMB_SCALE = 0.22;
 const THUMB_JPEG_QUALITY = 0.7;
-// NAS-proxy die Brickset ontsluit (zie brickset-proxy project). Lokaal netwerkadres —
-// werkt alleen als je tablet op hetzelfde wifi-netwerk zit als de NAS.
-const BRICKSET_PROXY_BASE = "http://192.168.178.189:3210";
+// NAS-proxy die Brickset ontsluit (zie brickset-proxy project). Lokaal netwerkadres, via HTTPS
+// met een eigen vertrouwd certificaat — anders blokkeert de browser dit als "mixed content"
+// omdat BrickRewind zelf via https (GitHub Pages) geladen wordt.
+const BRICKSET_PROXY_BASE = "https://192.168.178.189:3443";
 
 let pdfDocs = [];        // pdf.js document objects, in booklet order
 let pageDocMap = [];     // pageDocMap[globalIndex-1] = { docIndex, pageNumInDoc }
