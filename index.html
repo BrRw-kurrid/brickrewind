@@ -441,6 +441,13 @@
   .info-card-text{font-size:12px; line-height:1.5; position:relative; z-index:1; color:rgba(255,255,255,.94);}
   .info-card-text a{color:#fff;}
 
+  .lego-deeplink{
+    display:inline-flex; align-items:center; gap:6px; margin:10px 0 0;
+    font-family:var(--mono); font-size:12px; letter-spacing:.03em; text-transform:uppercase;
+    color:var(--brick-red); text-decoration:none; border-bottom:1.5px dashed var(--brick-red); padding-bottom:1px;
+  }
+  .lego-deeplink:hover{color:#9c2f1c; border-color:#9c2f1c;}
+
 </style>
 </head>
 <body>
@@ -493,16 +500,18 @@
       <span class="search-pill-divider"></span>
       <button class="search-pill-btn" id="lookupSetBtn" type="button">Zoek set op</button>
     </div>
-    <div id="setSuggestions" class="set-suggestions" style="display:none;"></div>
+    <a id="legoInstructionsLink" class="lego-deeplink" href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">
+      Open bij LEGO om de PDF te downloaden
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>
+    </a>
     <div id="setLookupResult" class="set-lookup-result" style="display:none;"></div>
 
     <div class="info-cards">
       <div class="info-card card-red">
         <div class="info-card-title">PDF ophalen</div>
         <div class="info-card-text">
-          Geen automatische download — daar is geen openbare koppeling voor. Zoek je set op bij
-          <a href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">lego.com/service/buildinginstructions</a>
-          en upload de PDF('s) hieronder.
+          Geen automatische download — daar is geen openbare koppeling voor. Gebruik de knop hierboven om
+          je set bij LEGO zelf op te zoeken, download de PDF('s) daar, en upload ze hieronder.
         </div>
       </div>
       <div class="info-card card-teal">
@@ -515,8 +524,8 @@
       <div class="info-card card-amber">
         <div class="info-card-title">Automatisch invullen</div>
         <div class="info-card-text">
-          <b>Experimenteel.</b> Vul je gratis <a href="https://rebrickable.com/api/" target="_blank" rel="noopener">Rebrickable-sleutel</a>
-          hieronder in, dan komen naam en foto vanzelf mee terwijl je typt.
+          Naam, foto en aantal onderdelen komen automatisch mee zodra je op "Zoek set op" klikt —
+          opgehaald via Brickset, via mijn eigen NAS-proxy. Geen sleutel nodig, dat regelt de app zelf.
         </div>
       </div>
     </div>
@@ -525,13 +534,6 @@
       <div class="field" style="flex:1;">
         <label for="setnaam">Setnaam (optioneel — vult zich vaak vanzelf)</label>
         <input type="text" id="setnaam" class="wide" style="width:100%;" placeholder="bv. WALL-E" autocomplete="off">
-      </div>
-    </div>
-
-    <div class="row" style="align-items:flex-end; margin-top:12px;">
-      <div class="field" style="flex:1;">
-        <label for="rebrickableKey">Rebrickable API-sleutel (optioneel)</label>
-        <input type="text" id="rebrickableKey" class="wide" style="width:100%;" placeholder="plak hier je gratis sleutel">
       </div>
     </div>
 
@@ -692,12 +694,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 const VERSION = "0.18";
 const THUMB_SCALE = 0.22;
 const THUMB_JPEG_QUALITY = 0.7;
-// Geen standaard sleutel meer vooringevuld (die stond eerder hardcoded in de broncode,
-// wat een probleem is zodra dit bestand op een publieke plek zoals GitHub Pages staat).
-// Elke gebruiker vult hier zijn/haar eigen gratis Rebrickable-sleutel in; die wordt
-// daarna lokaal in de browser onthouden.
-const DEFAULT_REBRICKABLE_KEY = "";
-const REBRICKABLE_KEY_STORAGE = "brickrewind-rebrickable-key";
+// NAS-proxy die Brickset ontsluit (zie brickset-proxy project). Lokaal netwerkadres —
+// werkt alleen als je tablet op hetzelfde wifi-netwerk zit als de NAS.
+const BRICKSET_PROXY_BASE = "http://192.168.178.189:3210";
 
 let pdfDocs = [];        // pdf.js document objects, in booklet order
 let pageDocMap = [];     // pageDocMap[globalIndex-1] = { docIndex, pageNumInDoc }
@@ -759,9 +758,7 @@ pdfFileSingle.addEventListener('change', () => {
   }
 });
 
-// ---------- optionele setfoto-opzoekfunctie (experimenteel, best-effort) ----------
-// ---------- optionele setfoto-opzoekfunctie (experimenteel, best-effort) ----------
-function getRebrickableKey() { return document.getElementById('rebrickableKey').value.trim(); }
+// ---------- optionele setgegevens-opzoekfunctie via de eigen NAS-proxy (Brickset) ----------
 
 (function testLocalStorage() {
   const warn = document.getElementById('storageWarning');
@@ -781,126 +778,59 @@ function getRebrickableKey() { return document.getElementById('rebrickableKey').
   }
 })();
 
-(function initRebrickableKey() {
-  const input = document.getElementById('rebrickableKey');
-  let stored = null;
-  try { stored = localStorage.getItem(REBRICKABLE_KEY_STORAGE); } catch (e) { /* niet kritiek */ }
-  input.value = stored || DEFAULT_REBRICKABLE_KEY;
-  input.addEventListener('change', () => {
-    const v = input.value.trim();
-    try {
-      if (v) localStorage.setItem(REBRICKABLE_KEY_STORAGE, v);
-      else localStorage.removeItem(REBRICKABLE_KEY_STORAGE);
-    } catch (e) { /* niet kritiek */ }
-  });
-})();
-
 function showSetResult(hit) {
   const resultBox = document.getElementById('setLookupResult');
   resultBox.style.display = 'flex';
+  const img = hit.thumbnail_url || hit.image_url;
   resultBox.innerHTML =
-    `<img src="${hit.set_img_url}" alt="${hit.name}">` +
-    `<div class="info"><b>${hit.name}</b>${hit.set_num} · ${hit.year}<br>` +
-    `<a href="https://rebrickable.com/sets/${hit.set_num}/" target="_blank" rel="noopener">Bekijk op Rebrickable →</a></div>`;
+    (img ? `<img src="${img}" alt="${hit.name}">` : '') +
+    `<div class="info"><b>${hit.name}</b>${hit.number} · ${hit.year || '—'}` +
+    (hit.pieces ? ` · ${hit.pieces} onderdelen` : '') + `<br>` +
+    (hit.brickset_url ? `<a href="${hit.brickset_url}" target="_blank" rel="noopener">Bekijk op Brickset →</a>` : '') +
+    `</div>`;
 }
 
-function applySuggestion(hit) {
-  setnrInput.value = hit.set_num.replace(/-1$/, '');
-  setnaamInput.value = hit.name;
-  hideSuggestions();
-  showSetResult(hit);
+// ---------- Deeplink naar LEGO's eigen zoekpagina, met setnummer vooringevuld ----------
+const legoLink = document.getElementById('legoInstructionsLink');
+function updateLegoDeeplink() {
+  const v = setnrInput.value.trim();
+  legoLink.href = v
+    ? 'https://www.lego.com/service/buildinginstructions/search?initialsearch=' + encodeURIComponent(v)
+    : 'https://www.lego.com/service/buildinginstructions';
 }
-
-function hideSuggestions() {
-  const box = document.getElementById('setSuggestions');
-  box.style.display = 'none';
-  box.innerHTML = '';
-}
-
-async function fetchAndRenderSuggestions(query) {
-  const box = document.getElementById('setSuggestions');
-  const key = getRebrickableKey();
-  if (!key || query.trim().length < 2) { hideSuggestions(); return; }
-  box.style.display = 'block';
-  box.innerHTML = '<div class="suggest-item loading">Zoeken…</div>';
-  try {
-    const url = 'https://rebrickable.com/api/v3/lego/sets/?search=' + encodeURIComponent(query.trim()) +
-      '&page_size=8&key=' + encodeURIComponent(key);
-    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    const results = data.results || [];
-    if (!results.length) {
-      box.innerHTML = '<div class="suggest-item empty">Geen sets gevonden voor "' + query.trim() + '".</div>';
-      return;
-    }
-    box.innerHTML = results.map((hit, idx) =>
-      `<div class="suggest-item" data-idx="${idx}">` +
-      `<img src="${hit.set_img_url}" alt="" loading="lazy">` +
-      `<span><span class="num">${hit.set_num.replace(/-1$/, '')}</span>${hit.name} (${hit.year})</span>` +
-      `</div>`
-    ).join('');
-    Array.from(box.querySelectorAll('.suggest-item[data-idx]')).forEach((el, idx) => {
-      el.addEventListener('mousedown', (e) => { e.preventDefault(); applySuggestion(results[idx]); });
-    });
-  } catch (err) {
-    console.warn('Suggesties ophalen mislukt', err);
-    box.innerHTML = '<div class="suggest-item empty">Zoeken lukte niet (' + err.message + ').</div>';
-  }
-}
-
-let suggestTimer = null;
-function scheduleSuggest(query) {
-  clearTimeout(suggestTimer);
-  suggestTimer = setTimeout(() => fetchAndRenderSuggestions(query), 450);
-}
-setnrInput.addEventListener('input', () => scheduleSuggest(setnrInput.value));
-setnaamInput.addEventListener('input', () => scheduleSuggest(setnaamInput.value));
-[setnrInput, setnaamInput].forEach(inp => {
-  // kleine vertraging zodat een klik op een suggestie nog geregistreerd wordt vóór het dichtklappen
-  inp.addEventListener('blur', () => setTimeout(hideSuggestions, 200));
-});
+setnrInput.addEventListener('input', updateLegoDeeplink);
+updateLegoDeeplink();
 
 document.getElementById('lookupSetBtn').addEventListener('click', async () => {
-  hideSuggestions();
   const resultBox = document.getElementById('setLookupResult');
-  const key = getRebrickableKey();
   const setnr = setnrInput.value.trim();
   const setnaam = setnaamInput.value.trim();
 
   resultBox.style.display = 'flex';
-  if (!setnr && !setnaam) {
-    resultBox.innerHTML = '<div class="info">Vul minstens een setnummer of setnaam in om te zoeken.</div>';
+  if (!setnr) {
+    resultBox.innerHTML = '<div class="info">Vul een setnummer in om te zoeken.</div>';
     return;
   }
 
-  const searchTerm = [setnr, setnaam].filter(Boolean).join(' ');
-  const fallbackUrl = 'https://rebrickable.com/search/?q=' + encodeURIComponent(searchTerm);
-  const fallbackLink = `<a href="${fallbackUrl}" target="_blank" rel="noopener">Bekijk "${searchTerm}" op Rebrickable →</a>`;
-
-  if (!key) {
-    resultBox.innerHTML = `<div class="info">Geen API-sleutel ingevuld, dus geen automatische foto hier. ${fallbackLink}</div>`;
-    return;
-  }
-
-  resultBox.innerHTML = '<div class="info">Zoeken…</div>';
+  resultBox.innerHTML = '<div class="info">Zoeken via Brickset…</div>';
   try {
-    const apiUrl = 'https://rebrickable.com/api/v3/lego/sets/?search=' + encodeURIComponent(searchTerm) +
-      '&page_size=1&key=' + encodeURIComponent(key);
-    const resp = await fetch(apiUrl, { headers: { 'Accept': 'application/json' } });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    const hit = data.results && data.results[0];
-    if (!hit) {
-      resultBox.innerHTML = `<div class="info">Geen resultaat gevonden voor "${searchTerm}". ${fallbackLink}</div>`;
+    const url = BRICKSET_PROXY_BASE + '/lookup?set=' + encodeURIComponent(setnr);
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (resp.status === 404) {
+      resultBox.innerHTML = `<div class="info">Geen resultaat gevonden voor setnummer "${setnr}" op Brickset.</div>`;
       return;
     }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const hit = await resp.json();
     showSetResult(hit);
     if (!setnaam) setnaamInput.value = hit.name;
   } catch (err) {
-    console.warn('Setopzoeken mislukt', err);
-    resultBox.innerHTML = `<div class="info">Automatisch zoeken lukte niet in deze browser (${err.message}). ` +
-      `Dat kan aan Rebrickable's eigen instellingen liggen, niet per se aan je sleutel. ${fallbackLink}</div>`;
+    console.warn('Setopzoeken via NAS-proxy mislukt', err);
+    resultBox.innerHTML =
+      `<div class="info">Automatisch zoeken lukte niet (${err.message}). Zit je tablet op hetzelfde wifi-netwerk ` +
+      `als de NAS (${BRICKSET_PROXY_BASE})? En stond er bij de eerste keer een toestemmingsvraagje van Chrome ` +
+      `("verbinden met apparaten op je lokale netwerk") — die moet op Toestaan staan. Je kunt de setnaam ook ` +
+      `gewoon zelf hierboven invullen.</div>`;
   }
 });
 
