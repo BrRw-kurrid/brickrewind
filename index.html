@@ -500,7 +500,7 @@
       <span class="search-pill-divider"></span>
       <button class="search-pill-btn" id="lookupSetBtn" type="button">Zoek set op</button>
     </div>
-    <a id="legoInstructionsLink" class="lego-deeplink" href="https://www.lego.com/service/buildinginstructions" target="_blank" rel="noopener">
+    <a id="legoInstructionsLink" class="lego-deeplink" href="https://www.lego.com/nl-nl/service/buildinginstructions" target="_blank" rel="noopener">
       Open bij LEGO om de PDF te downloaden
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>
     </a>
@@ -796,8 +796,8 @@ const legoLink = document.getElementById('legoInstructionsLink');
 function updateLegoDeeplink() {
   const v = setnrInput.value.trim();
   legoLink.href = v
-    ? 'https://www.lego.com/service/buildinginstructions/search?initialsearch=' + encodeURIComponent(v)
-    : 'https://www.lego.com/service/buildinginstructions';
+    ? 'https://www.lego.com/nl-nl/service/buildinginstructions/search?initialsearch=' + encodeURIComponent(v)
+    : 'https://www.lego.com/nl-nl/service/buildinginstructions';
 }
 setnrInput.addEventListener('input', updateLegoDeeplink);
 updateLegoDeeplink();
