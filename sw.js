@@ -1,7 +1,7 @@
 // BrickRewind service worker
 // Verhoog CACHE_VERSION elke keer dat je index.html aanpast en opnieuw upload,
 // anders blijft de tablet de oude versie uit de cache tonen.
-const CACHE_VERSION = 'brickrewind-v0.18-8';
+const CACHE_VERSION = 'brickrewind-v0.18-9';
 const APP_SHELL = [
   './',
   './index.html',
@@ -45,6 +45,7 @@ self.addEventListener('fetch', (event) => {
 
   if (req.method !== 'GET') return;
   if (url.hostname.includes('rebrickable.com')) return; // niet cachen, altijd live
+  if (url.hostname === '192.168.178.189') return; // NAS-proxy: altijd live, geen SW-tussenlaag
 
   const isSameOrigin = url.origin === self.location.origin;
 
