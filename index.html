@@ -796,7 +796,7 @@ const legoLink = document.getElementById('legoInstructionsLink');
 function updateLegoDeeplink() {
   const v = setnrInput.value.trim();
   legoLink.href = v
-    ? 'https://www.lego.com/nl-nl/service/building-instructions/search-results?searchString=' + encodeURIComponent(v)
+    ? 'https://www.lego.com/nl-nl/service/building-instructions/' + encodeURIComponent(v)
     : 'https://www.lego.com/nl-nl/service/buildinginstructions';
 }
 setnrInput.addEventListener('input', updateLegoDeeplink);
