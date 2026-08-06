@@ -556,7 +556,9 @@
         </div>
       </div>
       <button id="loadBtn">PDF('s) inladen</button>
+      <button type="button" class="ghost" id="loadFromNasBtn">Laad vanaf NAS</button>
     </div>
+    <p class="hint" id="nasLoadHint" style="margin-top:4px; display:none;"></p>
     <div class="checkrow">
       <input type="checkbox" id="multiManual">
       <label for="multiManual" style="margin:0;">
@@ -802,6 +804,19 @@ function updateLegoDeeplink() {
 setnrInput.addEventListener('input', updateLegoDeeplink);
 updateLegoDeeplink();
 
+// Laat de NAS-downloadrouter weten welke set nu actief is, zodat straks binnenkomende
+// PDF's automatisch in de juiste setmap terechtkomen. "Fire and forget": als de NAS niet
+// bereikbaar is, mag dat de LEGO-link zelf niet blokkeren.
+legoLink.addEventListener('click', () => {
+  const setnr = setnrInput.value.trim();
+  if (!setnr) return;
+  fetch(BRICKSET_PROXY_BASE + '/session/set-active', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ setnr, setnaam: setnaamInput.value.trim() }),
+  }).catch((err) => console.warn('Kon actieve set niet doorgeven aan NAS', err));
+});
+
 document.getElementById('lookupSetBtn').addEventListener('click', async () => {
   const resultBox = document.getElementById('setLookupResult');
   const setnr = setnrInput.value.trim();
@@ -936,6 +951,25 @@ async function clearProgress() {
 }
 
 // ---------- pdf handling (multi-document aware) ----------
+async function loadPdfBuffers(buffers) {
+  statusEl.textContent = `${buffers.length > 1 ? buffers.length + ' PDF\'s worden' : 'PDF wordt'} geladen…`;
+  pdfDocs = [];
+  pageDocMap = [];
+  for (const buf of buffers) {
+    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    pdfDocs.push(doc);
+    const docIndex = pdfDocs.length - 1;
+    for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
+  }
+  totalPages = pageDocMap.length;
+  statusEl.textContent = `${totalPages} pagina's gevonden over ${pdfDocs.length} handleiding(en). Thumbnails renderen…`;
+  refreshExcludeDocSelect();
+  await buildPageGrid();
+  document.getElementById('markSection').style.display = 'block';
+  document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
+  await checkForResumableProgress();
+}
+
 loadBtn.addEventListener('click', async () => {
   let files = [];
   if (multiManualCheckbox.checked) {
@@ -948,29 +982,62 @@ loadBtn.addEventListener('click', async () => {
   }
 
   loadBtn.disabled = true;
-  statusEl.textContent = `${files.length > 1 ? files.length + ' PDF\'s worden' : 'PDF wordt'} geladen…`;
   try {
-    pdfDocs = [];
-    pageDocMap = [];
-    for (const file of files) {
-      const buf = await file.arrayBuffer();
-      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
-      pdfDocs.push(doc);
-      const docIndex = pdfDocs.length - 1;
-      for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
-    }
-    totalPages = pageDocMap.length;
-    statusEl.textContent = `${totalPages} pagina's gevonden over ${pdfDocs.length} handleiding(en). Thumbnails renderen…`;
-    refreshExcludeDocSelect();
-    await buildPageGrid();
-    document.getElementById('markSection').style.display = 'block';
-    document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
-    await checkForResumableProgress();
+    const buffers = [];
+    for (const file of files) buffers.push(await file.arrayBuffer());
+    await loadPdfBuffers(buffers);
   } catch (e) {
     console.error(e);
     statusEl.textContent = 'Kon de PDF(\'s) niet lezen: ' + e.message;
   }
   loadBtn.disabled = false;
+});
+
+// ---------- laden rechtstreeks vanaf de NAS-downloadmap van deze set ----------
+document.getElementById('loadFromNasBtn').addEventListener('click', async () => {
+  const hint = document.getElementById('nasLoadHint');
+  const setnr = setnrInput.value.trim();
+  if (!setnr) {
+    hint.style.display = 'block';
+    hint.textContent = 'Vul eerst een setnummer in.';
+    return;
+  }
+  const btn = document.getElementById('loadFromNasBtn');
+  btn.disabled = true;
+  hint.style.display = 'block';
+  hint.textContent = 'Bestanden opzoeken op de NAS…';
+  try {
+    const listUrl = BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
+      '&naam=' + encodeURIComponent(setnaamInput.value.trim());
+    const listResp = await fetch(listUrl);
+    if (!listResp.ok) throw new Error('HTTP ' + listResp.status);
+    const listing = await listResp.json();
+    if (!listing.files || !listing.files.length) {
+      hint.textContent = `Nog geen bestanden gevonden in map "${listing.folder}" op de NAS. ` +
+        `Heb je al op "Open bij LEGO" geklikt en gedownload?`;
+      btn.disabled = false;
+      return;
+    }
+    hint.textContent = `${listing.files.length} bestand(en) gevonden, laden…`;
+    const buffers = [];
+    for (const f of listing.files) {
+      const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
+      if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
+      buffers.push(await fileResp.arrayBuffer());
+    }
+    if (buffers.length > 1 && !multiManualCheckbox.checked) {
+      multiManualCheckbox.checked = true;
+      multiManualCheckbox.dispatchEvent(new Event('change'));
+    }
+    hint.textContent = '';
+    hint.style.display = 'none';
+    await loadPdfBuffers(buffers);
+  } catch (err) {
+    console.warn('Laden vanaf NAS mislukt', err);
+    hint.textContent = `Laden vanaf NAS mislukt (${err.message}). Zit dit apparaat op hetzelfde ` +
+      `wifi-netwerk als de NAS? Gebruik anders gewoon de gewone bestandskiezer hierboven.`;
+  }
+  btn.disabled = false;
 });
 
 let renderCallCounter = 0;
