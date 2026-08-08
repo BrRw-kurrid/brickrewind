@@ -1040,17 +1040,9 @@ document.getElementById('loadFromNasBtn').addEventListener('click', async () => 
   btn.disabled = false;
 });
 
-let renderCallCounter = 0;
 async function renderPageToCanvas(globalIndex, scale, cleanupAfter) {
   const ref = pageDocMap[globalIndex - 1];
   const doc = pdfDocs[ref.docIndex];
-  renderCallCounter++;
-  if (renderCallCounter % 25 === 0) {
-    // page.cleanup() (hieronder) ruimt alleen die ene pagina op; documentbrede caches (lettertypen,
-    // afbeeldingen) groeien over honderden unieke bezochte pagina's toch door — vandaar dit periodieke,
-    // grovere opruimmoment.
-    try { doc.cleanup(); } catch (e) { /* niet kritiek */ }
-  }
   const page = await doc.getPage(ref.pageNumInDoc);
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
@@ -1086,35 +1078,47 @@ function canvasToThumbImage(canvas) {
 }
 
 async function buildPageGrid() {
-  pageMeta = [];
+  pageMeta = new Array(totalPages);
   hasFinishedNumbering = false;
   numberingMode = false;
   excludingMode = false;
-  for (let i = 1; i <= totalPages; i++) {
-    if (i % 8 === 0) {
-      statusEl.textContent = `Thumbnails renderen… pagina ${i} / ${totalPages}`;
-      await new Promise(r => setTimeout(r, 0));
+
+  // Beperkte gelijktijdigheid (niet: alles tegelijk, niet: strikt één-voor-één) — snelheidswinst
+  // t.o.v. volledig sequentieel, zonder de eerdere bug terug te halen waarbij te veel live
+  // canvassen tegelijk ervoor zorgden dat browsers oudere canvas-bitmaps leegveegden. Elke
+  // "werker" houdt maar één canvas tegelijk vast, dus er zijn er nooit meer dan CONCURRENCY
+  // live tegelijk, ongeacht hoeveel pagina's er totaal zijn.
+  const CONCURRENCY = 3;
+  let nextIndex = 1;
+  let completed = 0;
+
+  async function worker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i > totalPages) return;
+      let canvas;
+      try {
+        canvas = await renderPageToCanvas(i, THUMB_SCALE, true);
+      } catch (err) {
+        console.warn('Render mislukt voor pagina', i, err);
+        canvas = errorThumbCanvas();
+      }
+      const thumb = await canvasToThumbImage(canvas);
+      const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
+      pageMeta[i - 1] = {
+        index: i, type, bagNumber: 1, docIndex: pageDocMap[i - 1].docIndex,
+        thumb, w: canvas.width, h: canvas.height
+      };
+      completed++;
+      if (completed % 8 === 0 || completed === totalPages) {
+        statusEl.textContent = `Thumbnails renderen… pagina ${completed} / ${totalPages}`;
+      }
+      await new Promise(r => setTimeout(r, 0)); // ademruimte voor de UI-thread
     }
-    if (i % 40 === 0) {
-      // periodiek interne pdf.js-caches opruimen — vermindert geheugendruk bij grote boekjes,
-      // wat een mogelijke oorzaak was van een enkele foutief herhaalde miniatuur
-      pdfDocs.forEach(d => { try { d.cleanup(); } catch (e) { /* niet kritiek */ } });
-      await new Promise(r => setTimeout(r, 0));
-    }
-    let canvas;
-    try {
-      canvas = await renderPageToCanvas(i, THUMB_SCALE, true);
-    } catch (err) {
-      console.warn('Render mislukt voor pagina', i, err);
-      canvas = errorThumbCanvas();
-    }
-    const thumb = await canvasToThumbImage(canvas);
-    const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
-    pageMeta.push({
-      index: i, type, bagNumber: 1, docIndex: pageDocMap[i - 1].docIndex,
-      thumb, w: canvas.width, h: canvas.height
-    });
   }
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalPages) }, () => worker()));
+
   renumberBags();
   statusEl.textContent = `Klaar. ${totalPages} pagina's ingeladen. Klik "Zakjes nummeren starten" en klik daarna ` +
     `de zakje-pagina's in volgorde aan. Twijfel je aan een miniatuur? Klik het ↻-knopje erop om 'm opnieuw te ` +
