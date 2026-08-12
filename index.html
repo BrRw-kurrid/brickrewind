@@ -448,6 +448,32 @@
   }
   .lego-deeplink:hover{color:#9c2f1c; border-color:#9c2f1c;}
 
+  /* --- Startscherm: twee-fasen-keuze --- */
+  .phase-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:4px;}
+  .phase-card{
+    text-align:left; border:2px solid var(--ink); border-radius:14px; padding:22px 20px;
+    background:var(--card); cursor:pointer; transition:transform .12s ease;
+  }
+  .phase-card:hover{transform:translateY(-2px);}
+  .phase-card-title{font-family:var(--display); font-size:19px; margin-bottom:8px;}
+  .phase-card-text{font-size:13px; color:var(--ink-soft); line-height:1.5;}
+  .back-btn{margin-bottom:4px;}
+
+  /* --- Bibliotheek-lijst --- */
+  .library-list{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:14px;}
+  .library-card{
+    display:flex; gap:12px; text-align:left; border:2px solid var(--ink); border-radius:12px;
+    padding:12px; background:var(--card); cursor:pointer; align-items:flex-start;
+  }
+  .library-card:hover{background:var(--paper);}
+  .library-card img{width:64px; height:64px; object-fit:contain; background:var(--paper); border-radius:8px; flex:none;}
+  .library-card-noimg{width:64px; height:64px; border-radius:8px; background:var(--paper); flex:none;}
+  .library-card-info{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .library-card-info b{font-family:var(--display); font-size:14px;}
+  .library-card-info .mono{font-family:var(--mono); font-size:11px; color:var(--ink-soft);}
+  .library-progress{height:6px; border-radius:4px; background:var(--paper); border:1px solid var(--line); overflow:hidden; margin:2px 0;}
+  .library-progress-bar{height:100%; background:var(--bag-teal);}
+
 </style>
 </head>
 <body>
@@ -479,7 +505,32 @@
 
   <div id="storageWarning" style="display:none; background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:13.5px; line-height:1.5;"></div>
 
-  <section>
+  <section id="phaseChoice">
+    <div class="phase-cards">
+      <button type="button" class="phase-card" id="gotoBuildBtn">
+        <div class="phase-card-title">Set ombouwen</div>
+        <div class="phase-card-text">
+          Setnummer invullen, PDF('s) ophalen, zakjes nummeren en pagina's uitsluiten. Het resultaat komt in de
+          bibliotheek op de NAS te staan.
+        </div>
+      </button>
+      <button type="button" class="phase-card" id="gotoLibraryBtn">
+        <div class="phase-card-title">Beginnen / verdergaan</div>
+        <div class="phase-card-text">
+          Kies een al omgebouwde set uit de bibliotheek en begin met slopen — of ga verder waar je gebleven was.
+        </div>
+      </button>
+    </div>
+  </section>
+
+  <section id="librarySection" style="display:none;">
+    <button type="button" class="ghost back-btn" id="libraryBackBtn">← Terug naar start</button>
+    <h2 style="margin-top:10px;">Kies een set uit de bibliotheek</h2>
+    <div id="libraryList" class="library-list"></div>
+  </section>
+
+  <section id="buildSection" style="display:none;">
+    <button type="button" class="ghost back-btn" id="buildBackBtn">← Terug naar start</button>
     <div class="hero-panel">
       <div class="hero-deco" aria-hidden="true">
         <span class="hp h1"></span>
@@ -763,25 +814,22 @@ pdfFileSingle.addEventListener('change', () => {
 
 // ---------- optionele setgegevens-opzoekfunctie via de eigen NAS-proxy (Brickset) ----------
 
-(function testLocalStorage() {
+(function testNasReachable() {
   const warn = document.getElementById('storageWarning');
-  try {
-    const testKey = 'brickrewind-storage-test';
-    localStorage.setItem(testKey, '1');
-    const readBack = localStorage.getItem(testKey);
-    localStorage.removeItem(testKey);
-    if (readBack !== '1') throw new Error('schrijven lukte, maar teruglezen niet');
-  } catch (e) {
-    warn.style.display = 'block';
-    warn.innerHTML =
-      '⚠ <b>Lokale opslag lijkt niet beschikbaar in deze browser/venster</b> (' + e.message + '). Dat betekent dat ' +
-      'BrickRewind je voortgang niet kan bewaren — sluit je een tabblad, dan ben je alles kwijt. Dit gebeurt vaak ' +
-      'in een privé-/incognitovenster, of als de browserinstellingen opslag door lokale bestanden blokkeren. ' +
-      'Probeer dit bestand in een gewoon (niet-privé) venster te openen.';
-  }
+  fetch(BRICKSET_PROXY_BASE + '/health', { headers: { 'Accept': 'application/json' } })
+    .then((resp) => { if (!resp.ok) throw new Error('HTTP ' + resp.status); })
+    .catch((e) => {
+      warn.style.display = 'block';
+      warn.innerHTML =
+        '⚠ <b>De NAS lijkt nu niet bereikbaar</b> (' + e.message + '). BrickRewind bewaart je voortgang in de ' +
+        'bibliotheek op de NAS — zonder verbinding kan dat niet, en ben je wijzigingen kwijt als je dit tabblad ' +
+        'sluit. Zit dit apparaat op hetzelfde wifi-netwerk als de NAS?';
+    });
 })();
 
+let lastBricksetHit = null;
 function showSetResult(hit) {
+  lastBricksetHit = hit;
   const resultBox = document.getElementById('setLookupResult');
   resultBox.style.display = 'flex';
   const img = hit.thumbnail_url || hit.image_url;
@@ -857,21 +905,15 @@ multiManualCheckbox.addEventListener('change', () => {
   if (on && !manualSlots.children.length) { addManualSlot(); addManualSlot(); }
 });
 
-// ---------- storage (save / resume progress) ----------
-function storageKey() {
-  const raw = setnrInput.value.trim();
-  if (!raw) return null;
-  // sla toegestane tekens plat: geen spaties/schuine strepen/aanhalingstekens in de sleutel
-  const clean = raw.toLowerCase().replace(/["'\\/]/g, '').replace(/\s+/g, '-');
-  return clean ? ('brickrewind-' + clean) : null;
+// ---------- bibliotheek (save / resume progress via de NAS, geen browseropslag meer) ----------
+function currentSetnr() {
+  return setnrInput.value.trim() || null;
 }
 
 let pendingSave = false;
 let saveDebounceTimer = null;
-let saveRetryTimer = null;
 
-// Bundel snel-opeenvolgende wijzigingen (bv. tijdens het klikken door 40 zakjes) tot één opslagactie,
-// in plaats van bij elke losse klik te bewaren — dat liep tegen de opslaglimiet (±100x/uur) aan.
+// Bundel snel-opeenvolgende wijzigingen (bv. tijdens het klikken door 40 zakjes) tot één opslagactie.
 function scheduleSave(delay) {
   pendingSave = true;
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
@@ -893,35 +935,37 @@ function setSaveIndicator(html, isStale) {
 async function saveProgress() {
   pendingSave = false;
   if (saveDebounceTimer) { clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
-  const key = storageKey();
-  if (!key || !totalPages) {
+  const setnr = currentSetnr();
+  if (!setnr || !totalPages) {
     setSaveIndicator('⚠ Niet opgeslagen — vul een setnummer in bij stap 1, anders gaat je voortgang verloren.', true);
     return;
   }
+  const payload = {
+    setnaam: setnaamInput.value.trim(),
+    brickset: lastBricksetHit,
+    totalPages,
+    docPageCounts: pdfDocs.map(d => d.numPages),
+    marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber })),
+    done: Array.from(doneSet),
+    lastIdx: curIdx,
+  };
   try {
-    const payload = {
-      totalPages,
-      docPageCounts: pdfDocs.map(d => d.numPages),
-      setnaam: setnaamInput.value.trim(),
-      marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber })),
-      done: Array.from(doneSet),
-      lastIdx: curIdx,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem(key, JSON.stringify(payload));
-    if (saveRetryTimer) { clearTimeout(saveRetryTimer); saveRetryTimer = null; }
+    const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const t = new Date().toLocaleTimeString('nl-NL');
     setSaveIndicator(
-      `✓ Opgeslagen in deze browser onder setnummer ${setnrInput.value.trim()} — laatst bijgewerkt om ${t}. ` +
-      `Veilig te sluiten.`, false
+      `✓ Opgeslagen in de bibliotheek op de NAS onder setnummer ${setnr} — laatst bijgewerkt om ${t}.`, false
     );
   } catch (e) {
-    console.warn('kon voortgang niet opslaan', e);
+    console.warn('kon voortgang niet opslaan naar de NAS-bibliotheek', e);
     pendingSave = true;
     const msg = (e && e.message) ? e.message : 'onbekende fout';
     setSaveIndicator(
-      `⚠ Opslaan lukte niet (${msg}). Dit kan gebeuren als je browser lokale opslag blokkeert (bv. een ` +
-      `privé-/incognitovenster, of instellingen die opslag door bestanden op je eigen computer weigeren). ` +
+      `⚠ Opslaan naar de NAS lukte niet (${msg}). Zit dit apparaat op hetzelfde wifi-netwerk als de NAS? ` +
       `<button type="button" class="retrySaveBtn ghost" style="margin-left:6px;">Probeer opnieuw</button>`, true
     );
     document.querySelectorAll('.retrySaveBtn').forEach(btn => btn.addEventListener('click', () => saveProgress()));
@@ -929,25 +973,28 @@ async function saveProgress() {
 }
 
 async function loadProgress() {
-  const key = storageKey();
-  if (!key) return null;
+  const setnr = currentSetnr();
+  if (!setnr) return null;
   try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return null;
-    return JSON.parse(raw);
+    const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr));
+    if (resp.status === 404) return null;
+    if (!resp.ok) return null;
+    return await resp.json();
   } catch (e) {
     return null;
   }
 }
 
 async function clearProgress() {
-  const key = storageKey();
-  if (!key) { statusEl.textContent = 'Vul eerst een setnummer in.'; return; }
+  const setnr = currentSetnr();
+  if (!setnr) { statusEl.textContent = 'Vul eerst een setnummer in.'; return; }
   try {
-    localStorage.removeItem(key);
-    statusEl.textContent = 'Voortgang gewist voor set ' + setnrInput.value.trim() + '.';
+    await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr), { method: 'DELETE' });
+    statusEl.textContent = 'Voortgang gewist in de bibliotheek voor set ' + setnr + '.';
     document.getElementById('resumeBanner').style.display = 'none';
-  } catch (e) { /* niets om te wissen */ }
+  } catch (e) {
+    statusEl.textContent = 'Wissen mislukt: ' + e.message;
+  }
 }
 
 // ---------- pdf handling (multi-document aware) ----------
@@ -1548,6 +1595,129 @@ async function checkForResumableProgress() {
     banner.style.display = 'none';
     pendingResume = null;
   }
+  return sameShape ? saved : null;
+}
+
+async function applyResume(saved) {
+  if (!saved || !saved.marks) return false;
+  const map = new Map(saved.marks.map(m => [m.i, m]));
+  pageMeta.forEach(p => {
+    const m = map.get(p.index);
+    if (m) { p.type = m.t; p.bagNumber = m.b; }
+  });
+  hasFinishedNumbering = true;
+  renderGrid();
+  if (await generateReversedSteps()) {
+    doneSet = new Set(saved.done || []);
+    await showViewer(saved.lastIdx || 0);
+    return true;
+  }
+  return false;
+}
+
+// ---------- Fase-navigatie: startscherm met twee knoppen ----------
+function showPhase(id) {
+  ['phaseChoice', 'librarySection', 'buildSection', 'markSection', 'viewer'].forEach((sid) => {
+    const el = document.getElementById(sid);
+    if (el) el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if (target) target.style.display = 'block';
+}
+
+document.getElementById('gotoBuildBtn').addEventListener('click', () => showPhase('buildSection'));
+document.getElementById('buildBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
+document.getElementById('libraryBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
+
+document.getElementById('gotoLibraryBtn').addEventListener('click', () => {
+  showPhase('librarySection');
+  loadLibraryList();
+});
+
+async function loadLibraryList() {
+  const list = document.getElementById('libraryList');
+  list.innerHTML = '<p class="hint">Bibliotheek ophalen van de NAS…</p>';
+  try {
+    const resp = await fetch(BRICKSET_PROXY_BASE + '/library');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.sets || !data.sets.length) {
+      list.innerHTML = '<p class="hint">Nog geen omgebouwde sets in de bibliotheek. Ga naar "Set ombouwen" ' +
+        'om te beginnen.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    data.sets.forEach((s) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'library-card';
+      const img = s.thumbnail_url || s.image_url;
+      card.innerHTML =
+        (img ? `<img src="${img}" alt="">` : '<div class="library-card-noimg"></div>') +
+        `<div class="library-card-info">
+          <b>${s.setnaam || s.setnr}</b>
+          <span class="mono">${s.setnr}${s.year ? ' · ' + s.year : ''}${s.pieces ? ' · ' + s.pieces + ' onderdelen' : ''}</span>
+          <div class="library-progress"><div class="library-progress-bar" style="width:${s.progressPercent}%;"></div></div>
+          <span class="mono">${s.doneCount} / ${s.totalPages} stappen (${s.progressPercent}%)</span>
+        </div>`;
+      card.addEventListener('click', () => openFromLibrary(s.setnr, s.setnaam));
+      list.appendChild(card);
+    });
+  } catch (err) {
+    console.warn('Bibliotheek ophalen mislukt', err);
+    list.innerHTML = `<p class="hint">Bibliotheek ophalen mislukt (${err.message}). Zit dit apparaat op ` +
+      `hetzelfde wifi-netwerk als de NAS?</p>`;
+  }
+}
+
+async function openFromLibrary(setnr, setnaam) {
+  showPhase('buildSection');
+  setnrInput.value = setnr;
+  setnaamInput.value = setnaam || '';
+  updateLegoDeeplink();
+  statusEl.textContent = 'Bibliotheekgegevens ophalen…';
+  try {
+    const entryResp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr));
+    if (!entryResp.ok) throw new Error('Bibliotheekgegevens ophalen mislukt (HTTP ' + entryResp.status + ')');
+    const entry = await entryResp.json();
+    if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
+
+    statusEl.textContent = 'PDF-bestanden ophalen van de NAS…';
+    const listResp = await fetch(BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
+      '&naam=' + encodeURIComponent(setnaam || ''));
+    if (!listResp.ok) throw new Error('Bestandenlijst ophalen mislukt (HTTP ' + listResp.status + ')');
+    const listing = await listResp.json();
+    if (!listing.files || !listing.files.length) {
+      throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
+    }
+    if (listing.files.length > 1 && !multiManualCheckbox.checked) {
+      multiManualCheckbox.checked = true;
+      multiManualCheckbox.dispatchEvent(new Event('change'));
+    }
+    const buffers = [];
+    for (const f of listing.files) {
+      const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
+      if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
+      buffers.push(await fileResp.arrayBuffer());
+    }
+
+    // loadPdfBuffers bouwt eerst een "beste gok"-indeling en checkt daarna zelf (via
+    // checkForResumableProgress) of er al opgeslagen voortgang bestaat voor dit setnummer —
+    // wat hier per definitie het geval is, dus we passen die meteen automatisch toe.
+    await loadPdfBuffers(buffers);
+    const saved = await checkForResumableProgress();
+    if (saved) {
+      await applyResume(saved);
+      document.getElementById('resumeBanner').style.display = 'none';
+      statusEl.textContent = 'Voortgang hersteld vanuit de bibliotheek.';
+    } else {
+      statusEl.textContent = 'PDF\'s geladen, maar de opgeslagen zakjes-indeling paste niet meer (bv. andere ' +
+        'PDF-versie). Controleer de nummering hieronder.';
+    }
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
+  }
 }
 
 document.getElementById('resumeIgnoreBtn').addEventListener('click', () => {
@@ -1557,17 +1727,7 @@ document.getElementById('resumeIgnoreBtn').addEventListener('click', () => {
 
 document.getElementById('resumeContinueBtn').addEventListener('click', async () => {
   if (!pendingResume) return;
-  const map = new Map(pendingResume.marks.map(m => [m.i, m]));
-  pageMeta.forEach(p => {
-    const m = map.get(p.index);
-    if (m) { p.type = m.t; p.bagNumber = m.b; }
-  });
-  hasFinishedNumbering = true;
-  renderGrid();
-  if (await generateReversedSteps()) {
-    doneSet = new Set(pendingResume.done || []);
-    await showViewer(pendingResume.lastIdx || 0);
-  }
+  await applyResume(pendingResume);
   document.getElementById('resumeBanner').style.display = 'none';
   statusEl.textContent = 'Voortgang hersteld.';
 });
