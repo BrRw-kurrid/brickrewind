@@ -612,6 +612,10 @@
           <button type="button" class="ghost" id="addManualBtn" style="align-self:flex-start; margin-top:4px;">+ Nog een handleiding</button>
         </div>
       </div>
+      <div class="field" style="max-width:190px;">
+        <label for="expectedBookletsInput">Aantal handleidingen (indien bekend)</label>
+        <input type="number" id="expectedBookletsInput" min="1" max="9" placeholder="bv. 2" style="width:100%;">
+      </div>
       <button id="loadBtn">PDF('s) inladen</button>
       <button type="button" class="ghost" id="loadFromNasBtn" disabled>Laad vanaf NAS</button>
     </div>
@@ -647,8 +651,12 @@
           handleidingen heen. Per ongeluk verkeerd geklikt? Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te
           maken. Deze balk blijft in beeld staan terwijl je scrolt, dus je hoeft niet terug naar boven om te stoppen.
         </p>
-        <div class="row" style="margin-top:10px;">
+        <div class="row" style="margin-top:10px; align-items:center; gap:10px;">
           <button class="go" id="numberBagsBtn">Zakjes nummeren starten</button>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin:0; cursor:pointer;">
+            <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
+            Elke handleiding heeft eigen zakjes-nummering (begint steeds opnieuw bij 1)
+          </label>
         </div>
         <div id="numberingStatus"></div>
       </div>
@@ -884,6 +892,8 @@ async function pollNasFilesOnce() {
   const setnr = setnrInput.value.trim();
   const btn = document.getElementById('loadFromNasBtn');
   const hint = document.getElementById('nasLoadHint');
+  const expectedRaw = document.getElementById('expectedBookletsInput').value.trim();
+  const expected = expectedRaw ? parseInt(expectedRaw, 10) : null;
   if (!setnr) { btn.disabled = true; btn.classList.remove('nas-ready'); return; }
   try {
     const listUrl = BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
@@ -897,9 +907,15 @@ async function pollNasFilesOnce() {
       hint.textContent = 'Nog geen bestanden gevonden op de NAS voor deze set — wacht tot de download + sync klaar is.';
       btn.disabled = true;
       btn.classList.remove('nas-ready');
+    } else if (expected && n < expected) {
+      hint.textContent = `${n} van de ${expected} verwachte bestanden gevonden op de NAS — nog wachten op de rest.`;
+      btn.disabled = true;
+      btn.classList.remove('nas-ready');
     } else {
-      hint.textContent = `${n} bestand(en) klaar op de NAS. Verwacht je meer boekjes? Wacht daar dan nog even ` +
-        `mee — controleer zelf even op de LEGO-pagina hoeveel het er in totaal zijn.`;
+      hint.textContent = expected
+        ? `Alle ${expected} bestanden gevonden op de NAS. Klaar om te laden.`
+        : `${n} bestand(en) gevonden op de NAS. Vul hierboven het verwachte aantal in voor een preciezere ` +
+          `check, of klik gerust als je weet dat dit alles is.`;
       btn.disabled = false;
       btn.classList.add('nas-ready');
     }
@@ -913,6 +929,9 @@ function startNasFilePoll() {
   pollNasFilesOnce();
   nasPollTimer = setInterval(pollNasFilesOnce, 4000);
 }
+document.getElementById('expectedBookletsInput').addEventListener('input', () => {
+  if (nasPollTimer) pollNasFilesOnce();
+});
 
 document.getElementById('lookupSetBtn').addEventListener('click', async () => {
   const resultBox = document.getElementById('setLookupResult');
@@ -994,7 +1013,7 @@ async function saveProgress() {
     brickset: lastBricksetHit,
     totalPages,
     docPageCounts: pdfDocs.map(d => d.numPages),
-    marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber })),
+    marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber, l: p.bagLabel })),
     done: Array.from(doneSet),
     lastIdx: curIdx,
   };
@@ -1203,7 +1222,7 @@ async function buildPageGrid() {
       const thumb = await canvasToThumbImage(canvas);
       const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
       pageMeta[i - 1] = {
-        index: i, type, bagNumber: 1, docIndex: pageDocMap[i - 1].docIndex,
+        index: i, type, bagNumber: 1, bagLabel: 1, docIndex: pageDocMap[i - 1].docIndex,
         thumb, w: canvas.width, h: canvas.height
       };
       completed++;
@@ -1254,9 +1273,9 @@ function renderGrid() {
     // has been finished at least once. Zakje/overslaan pages always show their label — that's the
     // useful feedback while you're actively clicking through the numbering.
     let chipText = '';
-    if (p.type === 'bag') chipText = 'ZAKJE ' + p.bagNumber;
+    if (p.type === 'bag') chipText = 'ZAKJE ' + (p.bagLabel ?? p.bagNumber);
     else if (p.type === 'skip') chipText = 'OVERSLAAN';
-    else if (p.type === 'step' && p.bagNumber && hasFinishedNumbering) chipText = 'zakje ' + p.bagNumber;
+    else if (p.type === 'step' && p.bagNumber && hasFinishedNumbering) chipText = 'zakje ' + (p.bagLabel ?? p.bagNumber);
     if (chipText) {
       const chip = document.createElement('div');
       chip.className = 'tagchip';
@@ -1288,14 +1307,19 @@ function renderGrid() {
 
 function cycleType(i) {
   const p = pageMeta[i];
+  const parallel = document.getElementById('parallelNumberingCheckbox').checked;
 
   if (numberingMode) {
     if (p.type === 'bag') {
       p.type = 'step'; // klik nogmaals = ongedaan maken
     } else {
       const nextNum = pageMeta.filter(x => x.type === 'bag').length + 1;
+      const nextLabel = parallel
+        ? pageMeta.filter(x => x.type === 'bag' && x.docIndex === p.docIndex).length + 1
+        : nextNum;
       p.type = 'bag';
-      p.bagNumber = nextNum;
+      p.bagNumber = nextNum;   // intern, uniek over de hele set — bepaalt de bouw-/sloopvolgorde
+      p.bagLabel = nextLabel;  // wat we aan jou tonen — matcht het fysieke zakje
     }
     renumberBags();
     renderGrid();
@@ -1321,11 +1345,14 @@ function cycleType(i) {
     p.type = 'bag';
     const prevBagNums = pageMeta.filter(x => x.type === 'bag').map(x => x.bagNumber);
     p.bagNumber = prevBagNums.length ? Math.max(...prevBagNums) + 1 : 1;
+    p.bagLabel = parallel
+      ? pageMeta.filter(x => x.type === 'bag' && x.docIndex === p.docIndex && x !== p).length + 1
+      : p.bagNumber;
   } else if (p.type === 'bag') {
-    const input = prompt('Zakjenummer voor deze pagina (of leeg laten om over te slaan):', p.bagNumber);
+    const input = prompt('Zakjenummer voor deze pagina (zoals op het fysieke zakje) — of leeg laten om over te slaan:', p.bagLabel ?? p.bagNumber);
     if (input === null) { /* annuleren: blijft zakje */ }
     else if (input.trim() === '') { p.type = 'skip'; }
-    else { p.bagNumber = parseInt(input, 10) || p.bagNumber; }
+    else { p.bagLabel = parseInt(input, 10) || p.bagLabel; }
   } else {
     p.type = 'step';
   }
@@ -1335,10 +1362,11 @@ function cycleType(i) {
 }
 
 function renumberBags() {
-  let currentBag = null; // geen zakje toegewezen totdat de eerste zakje-scheiding is gepasseerd
+  let currentBag = null;   // geen zakje toegewezen totdat de eerste zakje-scheiding is gepasseerd
+  let currentLabel = null;
   for (const p of pageMeta) {
-    if (p.type === 'bag') currentBag = p.bagNumber;
-    else if (p.type === 'step') p.bagNumber = currentBag;
+    if (p.type === 'bag') { currentBag = p.bagNumber; currentLabel = p.bagLabel; }
+    else if (p.type === 'step') { p.bagNumber = currentBag; p.bagLabel = currentLabel; }
   }
 }
 
@@ -1569,12 +1597,13 @@ async function renderStep(i) {
   stageLoading.textContent = 'Bouwstap laden…';
 
   document.getElementById('curStep').textContent = i + 1;
-  document.getElementById('bagTag').textContent = '→ terug in zakje ' + s.bagNumber;
+  const label = s.bagLabel ?? s.bagNumber;
+  document.getElementById('bagTag').textContent = '→ terug in zakje ' + label;
   document.getElementById('progressBar').style.width = Math.round(((i + 1) / reversedSteps.length) * 100) + '%';
 
   const nextS = reversedSteps[i + 1];
   const bagChangeNote = (!nextS || nextS.bagNumber !== s.bagNumber)
-    ? ` Dit is de laatste stap van zakje ${s.bagNumber} — leg dat zakje na deze stap helemaal terug.`
+    ? ` Dit is de laatste stap van zakje ${label} — leg dat zakje na deze stap helemaal terug.`
     : '';
   const pageNumInDoc = pageDocMap[s.index - 1].pageNumInDoc;
   const pageRef = pdfDocs.length > 1
@@ -1586,7 +1615,7 @@ async function renderStep(i) {
 
   document.getElementById('instructionText').innerHTML =
     `Zie <b>${pageRef}</b>${setLabel ? ' van ' + setLabel : ''} hierboven. Haal de onderdelen die in déze stap ` +
-    `oorspronkelijk werden toegevoegd los van het model, en leg ze terug in <b>zakje ${s.bagNumber}</b>.${bagChangeNote}`;
+    `oorspronkelijk werden toegevoegd los van het model, en leg ze terug in <b>zakje ${label}</b>.${bagChangeNote}`;
 
   updateDoneUI();
   document.getElementById('prevBtn').disabled = i === 0;
@@ -1653,7 +1682,7 @@ async function applyResume(saved) {
   const map = new Map(saved.marks.map(m => [m.i, m]));
   pageMeta.forEach(p => {
     const m = map.get(p.index);
-    if (m) { p.type = m.t; p.bagNumber = m.b; }
+    if (m) { p.type = m.t; p.bagNumber = m.b; p.bagLabel = (m.l !== undefined ? m.l : m.b); }
   });
   hasFinishedNumbering = true;
   renderGrid();
