@@ -474,6 +474,12 @@
   .library-progress{height:6px; border-radius:4px; background:var(--paper); border:1px solid var(--line); overflow:hidden; margin:2px 0;}
   .library-progress-bar{height:100%; background:var(--bag-teal);}
 
+  #loadFromNasBtn{transition:background-color .2s ease, border-color .2s ease, color .2s ease;}
+  #loadFromNasBtn:disabled{opacity:.55; cursor:not-allowed;}
+  #loadFromNasBtn.nas-ready{
+    background:var(--bag-teal); border-color:var(--bag-teal); color:#fff; opacity:1;
+  }
+
 </style>
 </head>
 <body>
@@ -607,7 +613,7 @@
         </div>
       </div>
       <button id="loadBtn">PDF('s) inladen</button>
-      <button type="button" class="ghost" id="loadFromNasBtn">Laad vanaf NAS</button>
+      <button type="button" class="ghost" id="loadFromNasBtn" disabled>Laad vanaf NAS</button>
     </div>
     <p class="hint" id="nasLoadHint" style="margin-top:4px; display:none;"></p>
     <div class="checkrow">
@@ -863,7 +869,50 @@ legoLink.addEventListener('click', () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ setnr, setnaam: setnaamInput.value.trim() }),
   }).catch((err) => console.warn('Kon actieve set niet doorgeven aan NAS', err));
+  startNasFilePoll();
 });
+
+// ---------- live checken hoeveel bestanden er al voor deze set op de NAS staan ----------
+// Voorkomt dat je op "Laad vanaf NAS" klikt terwijl een grote PDF nog aan het synchroniseren
+// is — de knop blijft uitgegrijsd tot er minstens één bestand daadwerkelijk klaarstaat, en
+// het aantal wordt live bijgewerkt zodat je zelf kunt zien of alle boekjes al zijn aangekomen.
+let nasPollTimer = null;
+function stopNasFilePoll() {
+  if (nasPollTimer) { clearInterval(nasPollTimer); nasPollTimer = null; }
+}
+async function pollNasFilesOnce() {
+  const setnr = setnrInput.value.trim();
+  const btn = document.getElementById('loadFromNasBtn');
+  const hint = document.getElementById('nasLoadHint');
+  if (!setnr) { btn.disabled = true; btn.classList.remove('nas-ready'); return; }
+  try {
+    const listUrl = BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
+      '&naam=' + encodeURIComponent(setnaamInput.value.trim());
+    const resp = await fetch(listUrl);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const listing = await resp.json();
+    const n = (listing.files || []).length;
+    hint.style.display = 'block';
+    if (n === 0) {
+      hint.textContent = 'Nog geen bestanden gevonden op de NAS voor deze set — wacht tot de download + sync klaar is.';
+      btn.disabled = true;
+      btn.classList.remove('nas-ready');
+    } else {
+      hint.textContent = `${n} bestand(en) klaar op de NAS. Verwacht je meer boekjes? Wacht daar dan nog even ` +
+        `mee — controleer zelf even op de LEGO-pagina hoeveel het er in totaal zijn.`;
+      btn.disabled = false;
+      btn.classList.add('nas-ready');
+    }
+  } catch (err) {
+    hint.style.display = 'block';
+    hint.textContent = 'NAS-status checken mislukt (' + err.message + ').';
+  }
+}
+function startNasFilePoll() {
+  stopNasFilePoll();
+  pollNasFilesOnce();
+  nasPollTimer = setInterval(pollNasFilesOnce, 4000);
+}
 
 document.getElementById('lookupSetBtn').addEventListener('click', async () => {
   const resultBox = document.getElementById('setLookupResult');
@@ -1042,6 +1091,7 @@ loadBtn.addEventListener('click', async () => {
 
 // ---------- laden rechtstreeks vanaf de NAS-downloadmap van deze set ----------
 document.getElementById('loadFromNasBtn').addEventListener('click', async () => {
+  stopNasFilePoll();
   const hint = document.getElementById('nasLoadHint');
   const setnr = setnrInput.value.trim();
   if (!setnr) {
@@ -1626,7 +1676,7 @@ function showPhase(id) {
 }
 
 document.getElementById('gotoBuildBtn').addEventListener('click', () => showPhase('buildSection'));
-document.getElementById('buildBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
+document.getElementById('buildBackBtn').addEventListener('click', () => { stopNasFilePoll(); showPhase('phaseChoice'); });
 document.getElementById('libraryBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
 
 document.getElementById('gotoLibraryBtn').addEventListener('click', () => {
