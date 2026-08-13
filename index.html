@@ -536,6 +536,13 @@
 
   <section id="buildSection" style="display:none;">
     <button type="button" class="ghost back-btn" id="buildBackBtn">← Terug naar start</button>
+
+    <div id="inProgressBlock" style="display:none;">
+      <h2 style="margin-top:10px;">Verder met een onafgeronde set</h2>
+      <div id="inProgressList" class="library-list"></div>
+      <p class="hint" style="margin:10px 0 0;">Of begin hieronder met een nieuwe set.</p>
+    </div>
+
     <div class="hero-panel">
       <div class="hero-deco" aria-hidden="true">
         <span class="hp h1"></span>
@@ -1020,30 +1027,21 @@ async function loadPdfBuffers(buffers) {
 }
 
 // ---------- laden rechtstreeks vanaf de NAS-downloadmap van deze set ----------
-document.getElementById('loadFromNasBtn').addEventListener('click', async () => {
-  stopNasFilePoll();
+async function loadSetFromNas(setnr, setnaam) {
   const hint = document.getElementById('nasLoadHint');
-  const setnr = setnrInput.value.trim();
-  if (!setnr) {
-    hint.style.display = 'block';
-    hint.textContent = 'Vul eerst een setnummer in.';
-    return;
-  }
   const btn = document.getElementById('loadFromNasBtn');
-  btn.disabled = true;
   hint.style.display = 'block';
   hint.textContent = 'Bestanden opzoeken op de NAS…';
   try {
     const listUrl = BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
-      '&naam=' + encodeURIComponent(setnaamInput.value.trim());
+      '&naam=' + encodeURIComponent(setnaam || '');
     const listResp = await fetch(listUrl);
     if (!listResp.ok) throw new Error('HTTP ' + listResp.status);
     const listing = await listResp.json();
     if (!listing.files || !listing.files.length) {
       hint.textContent = `Nog geen bestanden gevonden in map "${listing.folder}" op de NAS. ` +
         `Heb je al op "Open bij LEGO" geklikt en gedownload?`;
-      btn.disabled = false;
-      return;
+      return false;
     }
     hint.textContent = `${listing.files.length} bestand(en) gevonden, laden…`;
     const buffers = [];
@@ -1055,13 +1053,52 @@ document.getElementById('loadFromNasBtn').addEventListener('click', async () => 
     hint.textContent = '';
     hint.style.display = 'none';
     await loadPdfBuffers(buffers);
+    return true;
   } catch (err) {
     console.warn('Laden vanaf NAS mislukt', err);
     hint.textContent = `Laden vanaf NAS mislukt (${err.message}). Zit dit apparaat op hetzelfde ` +
-      `wifi-netwerk als de NAS? Gebruik anders gewoon de gewone bestandskiezer hierboven.`;
+      `wifi-netwerk als de NAS?`;
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  btn.disabled = false;
+}
+
+document.getElementById('loadFromNasBtn').addEventListener('click', async () => {
+  stopNasFilePoll();
+  const setnr = setnrInput.value.trim();
+  if (!setnr) {
+    const hint = document.getElementById('nasLoadHint');
+    hint.style.display = 'block';
+    hint.textContent = 'Vul eerst een setnummer in.';
+    return;
+  }
+  document.getElementById('loadFromNasBtn').disabled = true;
+  await loadSetFromNas(setnr, setnaamInput.value.trim());
 });
+
+// ---------- fase 1, uitbreiding: verder met een set waarvan het ombouwen nog niet is afgerond ----------
+async function loadInProgressList() {
+  const block = document.getElementById('inProgressBlock');
+  const list = document.getElementById('inProgressList');
+  try {
+    const sets = (await fetchLibrarySets()).filter((s) => !s.finished);
+    if (!sets.length) { block.style.display = 'none'; return; }
+    block.style.display = 'block';
+    renderLibraryCards(list, sets, '', (setnr, setnaam) => resumeBuildingSet(setnr, setnaam));
+  } catch (err) {
+    console.warn('Onafgeronde sets ophalen mislukt', err);
+    block.style.display = 'none';
+  }
+}
+
+async function resumeBuildingSet(setnr, setnaam) {
+  setnrInput.value = setnr;
+  setnaamInput.value = setnaam || '';
+  updateLegoDeeplink();
+  statusEl.textContent = 'PDF\'s ophalen van de NAS…';
+  await loadSetFromNas(setnr, setnaam);
+}
 
 async function renderPageToCanvas(globalIndex, scale, cleanupAfter) {
   const ref = pageDocMap[globalIndex - 1];
@@ -1654,7 +1691,10 @@ function showPhase(id) {
   if (id === 'gridPage') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-document.getElementById('gotoBuildBtn').addEventListener('click', () => showPhase('buildSection'));
+document.getElementById('gotoBuildBtn').addEventListener('click', () => {
+  showPhase('buildSection');
+  loadInProgressList();
+});
 document.getElementById('buildBackBtn').addEventListener('click', () => { stopNasFilePoll(); showPhase('phaseChoice'); });
 document.getElementById('libraryBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
 
@@ -1663,35 +1703,47 @@ document.getElementById('gotoLibraryBtn').addEventListener('click', () => {
   loadLibraryList();
 });
 
+function renderLibraryCards(containerEl, sets, emptyMessage, onPick) {
+  if (!sets.length) {
+    containerEl.innerHTML = `<p class="hint">${emptyMessage}</p>`;
+    return;
+  }
+  containerEl.innerHTML = '';
+  sets.forEach((s) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'library-card';
+    const img = s.thumbnail_url || s.image_url;
+    card.innerHTML =
+      (img ? `<img src="${img}" alt="">` : '<div class="library-card-noimg"></div>') +
+      `<div class="library-card-info">
+        <b>${s.setnaam || s.setnr}</b>
+        <span class="mono">${s.setnr}${s.year ? ' · ' + s.year : ''}${s.pieces ? ' · ' + s.pieces + ' onderdelen' : ''}</span>
+        <div class="library-progress"><div class="library-progress-bar" style="width:${s.progressPercent}%;"></div></div>
+        <span class="mono">${s.doneCount} / ${s.totalPages} stappen (${s.progressPercent}%)</span>
+      </div>`;
+    card.addEventListener('click', () => onPick(s.setnr, s.setnaam));
+    containerEl.appendChild(card);
+  });
+}
+
+async function fetchLibrarySets() {
+  const resp = await fetch(BRICKSET_PROXY_BASE + '/library');
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  return data.sets || [];
+}
+
 async function loadLibraryList() {
   const list = document.getElementById('libraryList');
   list.innerHTML = '<p class="hint">Bibliotheek ophalen van de NAS…</p>';
   try {
-    const resp = await fetch(BRICKSET_PROXY_BASE + '/library');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    if (!data.sets || !data.sets.length) {
-      list.innerHTML = '<p class="hint">Nog geen omgebouwde sets in de bibliotheek. Ga naar "Set ombouwen" ' +
-        'om te beginnen.</p>';
-      return;
-    }
-    list.innerHTML = '';
-    data.sets.forEach((s) => {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'library-card';
-      const img = s.thumbnail_url || s.image_url;
-      card.innerHTML =
-        (img ? `<img src="${img}" alt="">` : '<div class="library-card-noimg"></div>') +
-        `<div class="library-card-info">
-          <b>${s.setnaam || s.setnr}</b>
-          <span class="mono">${s.setnr}${s.year ? ' · ' + s.year : ''}${s.pieces ? ' · ' + s.pieces + ' onderdelen' : ''}</span>
-          <div class="library-progress"><div class="library-progress-bar" style="width:${s.progressPercent}%;"></div></div>
-          <span class="mono">${s.doneCount} / ${s.totalPages} stappen (${s.progressPercent}%)</span>
-        </div>`;
-      card.addEventListener('click', () => openFromLibrary(s.setnr, s.setnaam));
-      list.appendChild(card);
-    });
+    const sets = (await fetchLibrarySets()).filter((s) => s.finished);
+    renderLibraryCards(
+      list, sets,
+      'Nog geen afgeronde sets in de bibliotheek. Rond eerst het ombouwen van een set af via "Set ombouwen".',
+      (setnr, setnaam) => openFromLibrary(setnr, setnaam)
+    );
   } catch (err) {
     console.warn('Bibliotheek ophalen mislukt', err);
     list.innerHTML = `<p class="hint">Bibliotheek ophalen mislukt (${err.message}). Zit dit apparaat op ` +
