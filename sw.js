@@ -1,7 +1,7 @@
 // BrickRewind service worker
 // Verhoog CACHE_VERSION elke keer dat je index.html aanpast en opnieuw upload,
 // anders blijft de tablet de oude versie uit de cache tonen.
-const CACHE_VERSION = 'brickrewind-v0.18-17';
+const CACHE_VERSION = 'brickrewind-v0.18-18';
 const APP_SHELL = [
   './',
   './index.html',

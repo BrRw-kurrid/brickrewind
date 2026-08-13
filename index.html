@@ -168,7 +168,6 @@
   .resume-banner b{display:block; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#8a6d00; margin-bottom:4px;}
   .resume-banner .btns{margin-top:10px; display:flex; gap:10px;}
 
-  #manualSlots{display:flex; flex-direction:column; gap:12px; width:100%;}
   .manual-slot{display:flex; flex-direction:column; gap:4px;}
   .manual-slot .row2{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .manual-slot .lbl{font-family:var(--mono); font-size:11px; color:var(--ink-soft); width:88px; flex:none;}
@@ -595,37 +594,13 @@
     </div>
 
     <div class="row" style="margin-top:4px;">
-      <div class="field" id="singleFileRow" style="flex:1;">
-        <label for="pdfFileSingle">Officiële instructie-PDF</label>
-        <div class="file-drop">
-          <div class="file-picker-row">
-            <label class="file-picker-btn" for="pdfFileSingle">Bestand kiezen</label>
-            <span class="filename-inline empty" id="pdfFileSingleName">Geen bestand gekozen</span>
-          </div>
-          <input type="file" id="pdfFileSingle" accept="application/pdf" class="file-input-hidden">
-        </div>
-      </div>
-      <div class="field" id="multiFileRow" style="flex:1; display:none;">
-        <label>Handleidingen, in boekje-volgorde</label>
-        <div class="file-drop">
-          <div id="manualSlots"></div>
-          <button type="button" class="ghost" id="addManualBtn" style="align-self:flex-start; margin-top:4px;">+ Nog een handleiding</button>
-        </div>
-      </div>
       <div class="field" style="max-width:190px;">
         <label for="expectedBookletsInput">Aantal handleidingen (indien bekend)</label>
         <input type="number" id="expectedBookletsInput" min="1" max="9" placeholder="bv. 2" style="width:100%;">
       </div>
-      <button id="loadBtn">PDF('s) inladen</button>
       <button type="button" class="ghost" id="loadFromNasBtn" disabled>Laad vanaf NAS</button>
     </div>
     <p class="hint" id="nasLoadHint" style="margin-top:4px; display:none;"></p>
-    <div class="checkrow">
-      <input type="checkbox" id="multiManual">
-      <label for="multiManual" style="margin:0;">
-        Deze set bestaat uit meerdere handleidingen (PDF's) — de zakjesnummering loopt door vanaf handleiding 1
-      </label>
-    </div>
     <div id="status"></div>
   </section>
 
@@ -781,50 +756,6 @@ let hasFinishedNumbering = false; // true once "Zakjes nummeren stoppen" is clic
 const statusEl = document.getElementById('status');
 const setnrInput = document.getElementById('setnr');
 const setnaamInput = document.getElementById('setnaam');
-const multiManualCheckbox = document.getElementById('multiManual');
-const singleFileRow = document.getElementById('singleFileRow');
-const multiFileRow = document.getElementById('multiFileRow');
-const manualSlots = document.getElementById('manualSlots');
-const addManualBtn = document.getElementById('addManualBtn');
-const pdfFileSingle = document.getElementById('pdfFileSingle');
-const loadBtn = document.getElementById('loadBtn');
-
-// ---------- multi-manual upload UI ----------
-function addManualSlot() {
-  const n = manualSlots.children.length + 1;
-  const row = document.createElement('div');
-  row.className = 'manual-slot';
-  const inputId = 'manualFile_' + n + '_' + Date.now();
-  row.innerHTML =
-    `<div class="row2"><span class="lbl">Handleiding ${n}</span>` +
-    `<label class="file-picker-btn" for="${inputId}">Bestand kiezen</label>` +
-    `<span class="filename-inline empty">Geen bestand gekozen</span></div>` +
-    `<input type="file" id="${inputId}" class="manualFileInput file-input-hidden" accept="application/pdf">`;
-  const input = row.querySelector('.manualFileInput');
-  const nameSpan = row.querySelector('.filename-inline');
-  input.addEventListener('change', () => {
-    if (input.files[0]) {
-      nameSpan.textContent = input.files[0].name;
-      nameSpan.classList.remove('empty');
-    } else {
-      nameSpan.textContent = 'Geen bestand gekozen';
-      nameSpan.classList.add('empty');
-    }
-  });
-  manualSlots.appendChild(row);
-}
-addManualBtn.addEventListener('click', addManualSlot);
-
-pdfFileSingle.addEventListener('change', () => {
-  const nameSpan = document.getElementById('pdfFileSingleName');
-  if (pdfFileSingle.files[0]) {
-    nameSpan.textContent = pdfFileSingle.files[0].name;
-    nameSpan.classList.remove('empty');
-  } else {
-    nameSpan.textContent = 'Geen bestand gekozen';
-    nameSpan.classList.add('empty');
-  }
-});
 
 // ---------- optionele setgegevens-opzoekfunctie via de eigen NAS-proxy (Brickset) ----------
 
@@ -966,13 +897,6 @@ document.getElementById('lookupSetBtn').addEventListener('click', async () => {
   }
 });
 
-multiManualCheckbox.addEventListener('change', () => {
-  const on = multiManualCheckbox.checked;
-  singleFileRow.style.display = on ? 'none' : '';
-  multiFileRow.style.display = on ? '' : 'none';
-  if (on && !manualSlots.children.length) { addManualSlot(); addManualSlot(); }
-});
-
 // ---------- bibliotheek (save / resume progress via de NAS, geen browseropslag meer) ----------
 function currentSetnr() {
   return setnrInput.value.trim() || null;
@@ -1085,29 +1009,6 @@ async function loadPdfBuffers(buffers) {
   await checkForResumableProgress();
 }
 
-loadBtn.addEventListener('click', async () => {
-  let files = [];
-  if (multiManualCheckbox.checked) {
-    files = Array.from(document.querySelectorAll('.manualFileInput')).map(inp => inp.files[0]).filter(Boolean);
-    if (!files.length) { statusEl.textContent = 'Upload minstens één handleiding-PDF.'; return; }
-  } else {
-    const f = pdfFileSingle.files[0];
-    if (!f) { statusEl.textContent = 'Kies eerst een PDF-bestand.'; return; }
-    files = [f];
-  }
-
-  loadBtn.disabled = true;
-  try {
-    const buffers = [];
-    for (const file of files) buffers.push(await file.arrayBuffer());
-    await loadPdfBuffers(buffers);
-  } catch (e) {
-    console.error(e);
-    statusEl.textContent = 'Kon de PDF(\'s) niet lezen: ' + e.message;
-  }
-  loadBtn.disabled = false;
-});
-
 // ---------- laden rechtstreeks vanaf de NAS-downloadmap van deze set ----------
 document.getElementById('loadFromNasBtn').addEventListener('click', async () => {
   stopNasFilePoll();
@@ -1140,10 +1041,6 @@ document.getElementById('loadFromNasBtn').addEventListener('click', async () => 
       const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
       if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
       buffers.push(await fileResp.arrayBuffer());
-    }
-    if (buffers.length > 1 && !multiManualCheckbox.checked) {
-      multiManualCheckbox.checked = true;
-      multiManualCheckbox.dispatchEvent(new Event('change'));
     }
     hint.textContent = '';
     hint.style.display = 'none';
@@ -1768,10 +1665,6 @@ async function openFromLibrary(setnr, setnaam) {
     const listing = await listResp.json();
     if (!listing.files || !listing.files.length) {
       throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
-    }
-    if (listing.files.length > 1 && !multiManualCheckbox.checked) {
-      multiManualCheckbox.checked = true;
-      multiManualCheckbox.dispatchEvent(new Event('change'));
     }
     const buffers = [];
     for (const f of listing.files) {
