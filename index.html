@@ -172,15 +172,15 @@
   .manual-slot .row2{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .manual-slot .lbl{font-family:var(--mono); font-size:11px; color:var(--ink-soft); width:88px; flex:none;}
 
-  .mode-bar{
+  .grid-toolbar{
     position:sticky; top:0; z-index:20; background:var(--card);
-    padding-top:2px; padding-bottom:12px; margin-bottom:6px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; flex-wrap:wrap; gap:10px;
+    padding:10px 0 12px; margin-bottom:10px; border-bottom:1px solid var(--line);
   }
-  .numbering-box, .exclude-box{
-    background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+  .grid-mode-tabs{display:flex; gap:8px; flex-wrap:wrap; margin-right:auto;}
+  .mode-panel{
+    background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px;
   }
-  .exclude-box{margin-top:10px;}
-  .numbering-box .tt, .exclude-box .tt{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--bag-teal); font-weight:600; margin-bottom:6px;}
   #numberingStatus, #excludingStatus{font-family:var(--mono); font-size:12.5px; color:var(--brick-red); margin-top:8px; min-height:16px;}
   .exclude-range-row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
   .exclude-range-row .field{min-width:0;}
@@ -194,7 +194,7 @@
   #pageGrid.excluding-active .pg{cursor:not-allowed;}
   #pageGrid.excluding-active .pg:hover{outline:2px solid var(--ink-soft); outline-offset:1px;}
   #pageGrid{
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:10px; margin-top:14px;
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(136px,1fr)); gap:12px; margin-top:14px;
   }
   .grid-divider{
     grid-column:1 / -1; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em;
@@ -605,8 +605,8 @@
   </section>
 
   <section id="markSection" style="display:none;">
-    <div class="step-eyebrow"><span class="num">2</span> Zakjes nummeren</div>
-    <h2>Markeer op welke pagina's een nieuw zakje begint</h2>
+    <div class="step-eyebrow"><span class="num">2</span> Zakjes nummeren &amp; pagina's uitsluiten</div>
+    <h2>Zet de handleiding klaar voor de sloopgids</h2>
 
     <div class="resume-banner" id="resumeBanner">
       <b>Eerdere voortgang gevonden</b>
@@ -617,58 +617,66 @@
       </div>
     </div>
 
-    <div class="mode-bar" id="modeBar">
-      <div class="numbering-box">
-        <div class="tt">Zakjes nummeren</div>
-        <p class="hint" style="margin:0;">
-          Klik de knop aan, en klik daarna gewoon in volgorde op de miniaturen waarop een genummerd zakje te zien
-          is: de eerste klik wordt automatisch zakje 1, de tweede zakje 2, enzovoort — ook over meerdere
-          handleidingen heen. Per ongeluk verkeerd geklikt? Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te
-          maken. Deze balk blijft in beeld staan terwijl je scrolt, dus je hoeft niet terug naar boven om te stoppen.
-        </p>
-        <div class="row" style="margin-top:10px; align-items:center; gap:10px;">
-          <button class="go" id="numberBagsBtn">Zakjes nummeren starten</button>
-          <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin:0; cursor:pointer;">
-            <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
-            Elke handleiding heeft eigen zakjes-nummering (begint steeds opnieuw bij 1)
-          </label>
-        </div>
-        <div id="numberingStatus"></div>
-      </div>
+    <p class="hint">
+      Markeer op welke pagina's een nieuw zakje begint, en sluit pagina's uit die niet bij een bouwstap horen
+      (voorblad, onderdelenoverzicht, tussenpagina's). Beide gebeuren op een eigen, overzichtelijk scherm met
+      grotere miniaturen.
+    </p>
+    <div class="row" style="margin-top:14px;">
+      <button class="go" id="openNumberingBtn">Zakjes nummeren</button>
+      <button class="secondary" id="openExcludingBtn">Pagina's uitsluiten</button>
+    </div>
+  </section>
 
-      <div class="exclude-box">
-        <div class="tt">Pagina's uitsluiten</div>
-        <p class="hint" style="margin:0;">
-          Voor pagina's die niet bij een bouwstap horen (onderdelenfoto's, voor-/achterkant van een handleiding,
-          tussenpagina's): klik de knop aan en klik daarna elke pagina aan die je wilt uitsluiten — nogmaals
-          klikken maakt het ongedaan. Handig voor losse, verspreide pagina's.
-        </p>
-        <div class="row" style="margin-top:10px;">
-          <button class="secondary" id="excludeBagsBtn">Pagina's uitsluiten starten</button>
-        </div>
-        <div id="excludingStatus"></div>
-
-        <div class="exclude-range-row">
-          <div class="field" id="excludeDocField" style="display:none;">
-            <label for="excludeDocSelect">Handleiding</label>
-            <select id="excludeDocSelect"></select>
-          </div>
-          <div class="field">
-            <label for="excludeFrom">Van pagina</label>
-            <input type="text" id="excludeFrom" placeholder="bv. 1">
-          </div>
-          <div class="field">
-            <label for="excludeTo">Tot en met pagina</label>
-            <input type="text" id="excludeTo" placeholder="bv. 8">
-          </div>
-          <button class="ghost" id="applyExcludeRangeBtn">Uitsluiten</button>
-        </div>
-        <p class="hint" style="margin:8px 0 0;">
-          Sneller voor een aaneengesloten reeks, zoals de eerste of laatste pagina's van een handleiding.
-          Bestaande zakje-markeringen in het bereik blijven staan (die worden niet overschreven).
-        </p>
-        <div id="excludeRangeStatus" style="font-family:var(--mono); font-size:12px; margin-top:6px; min-height:16px;"></div>
+  <section id="gridPage" style="display:none;">
+    <div class="grid-toolbar">
+      <button class="ghost" id="gridBackBtn">← Terug</button>
+      <div class="grid-mode-tabs">
+        <button class="go" id="numberBagsBtn">Zakjes nummeren starten</button>
+        <button class="secondary" id="excludeBagsBtn">Pagina's uitsluiten starten</button>
       </div>
+      <button class="go" id="generateBtn">Klaar — genereer sloopgids →</button>
+    </div>
+
+    <div id="numberingPanel" class="mode-panel">
+      <p class="hint" style="margin:0;">
+        Klik in volgorde op de miniaturen waarop een genummerd zakje te zien is: de eerste klik wordt automatisch
+        zakje 1, de tweede zakje 2, enzovoort — ook over meerdere handleidingen heen. Per ongeluk verkeerd geklikt?
+        Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te maken.
+      </p>
+      <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin-top:10px; cursor:pointer;">
+        <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
+        Elke handleiding heeft eigen zakjes-nummering (begint steeds opnieuw bij 1)
+      </label>
+      <div id="numberingStatus"></div>
+    </div>
+
+    <div id="excludingPanel" class="mode-panel" style="display:none;">
+      <p class="hint" style="margin:0;">
+        Klik elke pagina aan die je wilt uitsluiten (niet bij een bouwstap hoort) — nogmaals klikken maakt het
+        ongedaan. Handig voor losse, verspreide pagina's.
+      </p>
+      <div id="excludingStatus"></div>
+      <div class="exclude-range-row">
+        <div class="field" id="excludeDocField" style="display:none;">
+          <label for="excludeDocSelect">Handleiding</label>
+          <select id="excludeDocSelect"></select>
+        </div>
+        <div class="field">
+          <label for="excludeFrom">Van pagina</label>
+          <input type="text" id="excludeFrom" placeholder="bv. 1">
+        </div>
+        <div class="field">
+          <label for="excludeTo">Tot en met pagina</label>
+          <input type="text" id="excludeTo" placeholder="bv. 8">
+        </div>
+        <button class="ghost" id="applyExcludeRangeBtn">Uitsluiten</button>
+      </div>
+      <p class="hint" style="margin:8px 0 0;">
+        Sneller voor een aaneengesloten reeks, zoals de eerste of laatste pagina's van een handleiding. Bestaande
+        zakje-markeringen in het bereik blijven staan (die worden niet overschreven).
+      </p>
+      <div id="excludeRangeStatus" style="font-family:var(--mono); font-size:12px; margin-top:6px; min-height:16px;"></div>
     </div>
 
     <div id="pageGrid"></div>
@@ -678,15 +686,13 @@
       <span><i class="swatch" style="background:var(--ink-soft);"></i> Overslaan</span>
     </div>
     <p class="hint" style="margin-top:10px;">
-      Ook buiten de twee knoppen om kun je een pagina aanklikken om 'm te wisselen tussen <b>bouwstap</b> →
-      <b>zakje-scheiding</b> → <b>overslaan</b> — handig voor een losse correctie. Pagina's vóór het eerste
+      Ook buiten de twee bovenste knoppen om kun je een pagina aanklikken om 'm te wisselen tussen <b>bouwstap</b>
+      → <b>zakje-scheiding</b> → <b>overslaan</b> — handig voor een losse correctie. Pagina's vóór het eerste
       zakje (voorblad, onderdelenoverzicht) worden automatisch buiten de gids gehouden; het begin en eind van een
       tweede handleiding moet je zelf uitsluiten met bovenstaande knoppen, want dat kan BrickRewind niet
       betrouwbaar herkennen.
     </p>
-
-    <div class="row" style="margin-top:18px;">
-      <button class="go" id="generateBtn">Genereer omgekeerde sloopgids →</button>
+    <div class="row" style="margin-top:14px;">
       <button class="ghost" id="clearProgressBtn">Voortgang wissen</button>
     </div>
   </section>
@@ -751,6 +757,7 @@ let doneSet = new Set(); // set of original global page indices marked "done"
 let numberingMode = false;
 let excludingMode = false;
 let hasFinishedNumbering = false; // true once "Zakjes nummeren stoppen" is clicked at least once
+let ombouwFinished = false; // true pas na expliciete klik op "Klaar — genereer sloopgids"
 
 // ---------- element refs ----------
 const statusEl = document.getElementById('status');
@@ -938,6 +945,8 @@ async function saveProgress() {
     totalPages,
     docPageCounts: pdfDocs.map(d => d.numPages),
     marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber, l: p.bagLabel })),
+    parallelNumbering: document.getElementById('parallelNumberingCheckbox').checked,
+    finished: ombouwFinished,
     done: Array.from(doneSet),
     lastIdx: curIdx,
   };
@@ -1004,8 +1013,9 @@ async function loadPdfBuffers(buffers) {
   statusEl.textContent = `${totalPages} pagina's gevonden over ${pdfDocs.length} handleiding(en). Thumbnails renderen…`;
   refreshExcludeDocSelect();
   await buildPageGrid();
-  document.getElementById('markSection').style.display = 'block';
-  document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('numberingPanel').style.display = 'block';
+  document.getElementById('excludingPanel').style.display = 'none';
+  showPhase('markSection');
   await checkForResumableProgress();
 }
 
@@ -1095,6 +1105,7 @@ async function buildPageGrid() {
   hasFinishedNumbering = false;
   numberingMode = false;
   excludingMode = false;
+  ombouwFinished = false;
 
   // Beperkte gelijktijdigheid (niet: alles tegelijk, niet: strikt één-voor-één) — snelheidswinst
   // t.o.v. volledig sequentieel, zonder de eerdere bug terug te halen waarbij te veel live
@@ -1281,6 +1292,8 @@ function stopExcludingSilently() {
 
 numberBagsBtn.addEventListener('click', () => {
   stopExcludingSilently();
+  document.getElementById('numberingPanel').style.display = 'block';
+  document.getElementById('excludingPanel').style.display = 'none';
   numberingMode = !numberingMode;
   numberBagsBtn.textContent = numberingMode ? 'Zakjes nummeren stoppen' : 'Zakjes nummeren starten';
   numberBagsBtn.classList.toggle('active-mode', numberingMode);
@@ -1306,6 +1319,8 @@ function updateNumberingStatus() {
 }
 
 excludeBagsBtn.addEventListener('click', () => {
+  document.getElementById('excludingPanel').style.display = 'block';
+  document.getElementById('numberingPanel').style.display = 'none';
   if (numberingMode) {
     numberingMode = false;
     numberBagsBtn.textContent = 'Zakjes nummeren starten';
@@ -1327,6 +1342,25 @@ excludeBagsBtn.addEventListener('click', () => {
   }
   renderGrid();
   updateNumberingStatus();
+});
+
+// ---------- navigatie: landingspagina (stap 2) ↔ volledig-scherm grid-pagina ----------
+document.getElementById('openNumberingBtn').addEventListener('click', () => {
+  showPhase('gridPage');
+  document.getElementById('numberingPanel').style.display = 'block';
+  document.getElementById('excludingPanel').style.display = 'none';
+  if (!numberingMode) numberBagsBtn.click();
+});
+document.getElementById('openExcludingBtn').addEventListener('click', () => {
+  showPhase('gridPage');
+  document.getElementById('excludingPanel').style.display = 'block';
+  document.getElementById('numberingPanel').style.display = 'none';
+  if (!excludingMode) excludeBagsBtn.click();
+});
+document.getElementById('gridBackBtn').addEventListener('click', () => {
+  if (numberingMode) numberBagsBtn.click(); // stopt netjes af + bewaart, via bestaande logica
+  if (excludingMode) excludeBagsBtn.click();
+  showPhase('markSection');
 });
 
 function refreshExcludeDocSelect() {
@@ -1425,7 +1459,7 @@ async function showViewer(startIdx) {
 
 document.getElementById('exitFocusBtn').addEventListener('click', () => {
   document.body.classList.remove('viewer-focus');
-  document.getElementById('markSection').scrollIntoView({ behavior: 'smooth' });
+  showPhase('markSection');
 });
 
 function buildFilmstrip() {
@@ -1548,6 +1582,7 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     return;
   }
   doneSet = new Set();
+  ombouwFinished = true;
   if (await generateReversedSteps()) { await showViewer(0); saveProgress(); }
 });
 
@@ -1581,24 +1616,42 @@ async function applyResume(saved) {
     const m = map.get(p.index);
     if (m) { p.type = m.t; p.bagNumber = m.b; p.bagLabel = (m.l !== undefined ? m.l : m.b); }
   });
-  hasFinishedNumbering = true;
-  renderGrid();
-  if (await generateReversedSteps()) {
-    doneSet = new Set(saved.done || []);
-    await showViewer(saved.lastIdx || 0);
-    return true;
+  document.getElementById('parallelNumberingCheckbox').checked = !!saved.parallelNumbering;
+
+  if (saved.finished) {
+    ombouwFinished = true;
+    hasFinishedNumbering = true;
+    renderGrid();
+    if (await generateReversedSteps()) {
+      doneSet = new Set(saved.done || []);
+      await showViewer(saved.lastIdx || 0);
+      statusEl.textContent = 'Voortgang hersteld — sloopgids geopend op de plek waar je gebleven was.';
+      return true;
+    }
+    return false;
   }
-  return false;
+
+  // Nog niet klaargemeld met ombouwen — terug naar het grid-scherm, niet naar de sloopgids,
+  // anders zou er een sloopgids gegenereerd worden op basis van onvolledige zakjes-indeling.
+  ombouwFinished = false;
+  hasFinishedNumbering = false;
+  renderGrid();
+  showPhase('gridPage');
+  document.getElementById('numberingPanel').style.display = 'block';
+  document.getElementById('excludingPanel').style.display = 'none';
+  statusEl.textContent = 'Ga verder met nummeren/uitsluiten waar je gebleven was — nog niet klaargemeld.';
+  return true;
 }
 
 // ---------- Fase-navigatie: startscherm met twee knoppen ----------
 function showPhase(id) {
-  ['phaseChoice', 'librarySection', 'buildSection', 'markSection', 'viewer'].forEach((sid) => {
+  ['phaseChoice', 'librarySection', 'buildSection', 'markSection', 'gridPage', 'viewer'].forEach((sid) => {
     const el = document.getElementById(sid);
     if (el) el.style.display = 'none';
   });
   const target = document.getElementById(id);
   if (target) target.style.display = 'block';
+  if (id === 'gridPage') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 document.getElementById('gotoBuildBtn').addEventListener('click', () => showPhase('buildSection'));
@@ -1681,7 +1734,6 @@ async function openFromLibrary(setnr, setnaam) {
     if (saved) {
       await applyResume(saved);
       document.getElementById('resumeBanner').style.display = 'none';
-      statusEl.textContent = 'Voortgang hersteld vanuit de bibliotheek.';
     } else {
       statusEl.textContent = 'PDF\'s geladen, maar de opgeslagen zakjes-indeling paste niet meer (bv. andere ' +
         'PDF-versie). Controleer de nummering hieronder.';
@@ -1701,7 +1753,6 @@ document.getElementById('resumeContinueBtn').addEventListener('click', async () 
   if (!pendingResume) return;
   await applyResume(pendingResume);
   document.getElementById('resumeBanner').style.display = 'none';
-  statusEl.textContent = 'Voortgang hersteld.';
 });
 
 // ---------- Openingsmoment: tik om over te slaan, daarna helemaal opruimen ----------
