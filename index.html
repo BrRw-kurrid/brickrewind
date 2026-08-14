@@ -812,6 +812,16 @@ function updateLegoDeeplink() {
     : 'https://www.lego.com/nl-nl/service/buildinginstructions';
 }
 setnrInput.addEventListener('input', updateLegoDeeplink);
+
+// Ook checken of er al bestanden op de NAS staan zodra je een setnummer intypt — niet pas
+// na een klik op "Open bij LEGO", want die klik is niet nodig als je al eerder downloadde.
+let setnrPollDebounce = null;
+setnrInput.addEventListener('input', () => {
+  clearTimeout(setnrPollDebounce);
+  setnrPollDebounce = setTimeout(() => {
+    if (setnrInput.value.trim()) startNasFilePoll();
+  }, 500);
+});
 updateLegoDeeplink();
 
 // Laat de NAS-downloadrouter weten welke set nu actief is, zodat straks binnenkomende
@@ -1782,6 +1792,7 @@ function showPhase(id) {
 document.getElementById('gotoBuildBtn').addEventListener('click', () => {
   showPhase('buildSection');
   loadInProgressList();
+  if (setnrInput.value.trim()) startNasFilePoll();
 });
 document.getElementById('buildBackBtn').addEventListener('click', () => { stopNasFilePoll(); showPhase('phaseChoice'); });
 document.getElementById('markBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
