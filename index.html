@@ -511,6 +511,7 @@
   <div id="storageWarning" style="display:none; background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:12px 16px; margin-top:14px; font-size:13.5px; line-height:1.5;"></div>
 
   <section id="phaseChoice">
+    <div id="phaseChoiceMessage" class="hint" style="display:none; margin-bottom:14px; padding:12px 14px; background:var(--paper); border:1px solid var(--bag-teal); border-radius:10px;"></div>
     <div class="phase-cards">
       <button type="button" class="phase-card" id="gotoBuildBtn">
         <div class="phase-card-title">Set ombouwen</div>
@@ -612,6 +613,7 @@
   </section>
 
   <section id="markSection" style="display:none;">
+    <button type="button" class="ghost back-btn" id="markBackBtn">← Terug naar start</button>
     <div class="step-eyebrow"><span class="num">2</span> Zakjes nummeren &amp; pagina's uitsluiten</div>
     <h2>Zet de handleiding klaar voor de sloopgids</h2>
 
@@ -756,6 +758,7 @@ const BRICKSET_PROXY_BASE = "https://192.168.178.189:3443";
 
 let pdfDocs = [];        // pdf.js document objects, in booklet order
 let pageDocMap = [];     // pageDocMap[globalIndex-1] = { docIndex, pageNumInDoc }
+let docByteLengths = []; // docByteLengths[docIndex] = bytegrootte van dat bron-bestand (cache-versiesignaal)
 let totalPages = 0;
 let pageMeta = [];       // { index (global), type:'step'|'bag'|'skip', bagNumber, docIndex, canvas }
 let reversedSteps = [];
@@ -1010,7 +1013,9 @@ async function loadPdfBuffers(buffers) {
   statusEl.textContent = `${buffers.length > 1 ? buffers.length + ' PDF\'s worden' : 'PDF wordt'} geladen…`;
   pdfDocs = [];
   pageDocMap = [];
+  docByteLengths = [];
   for (const buf of buffers) {
+    docByteLengths.push(buf.byteLength);
     const doc = await pdfjsLib.getDocument({ data: buf }).promise;
     pdfDocs.push(doc);
     const docIndex = pdfDocs.length - 1;
@@ -1053,6 +1058,14 @@ async function loadSetFromNas(setnr, setnaam) {
     hint.textContent = '';
     hint.style.display = 'none';
     await loadPdfBuffers(buffers);
+    const saved = await checkForResumableProgress();
+    if (saved) {
+      await applyResume(saved);
+      document.getElementById('resumeBanner').style.display = 'none';
+    } else {
+      statusEl.textContent = `${buffers.length} PDF('s) geladen. Geen (passende) eerdere voortgang gevonden — ` +
+        `begin bij "Zakjes nummeren".`;
+    }
     return true;
   } catch (err) {
     console.warn('Laden vanaf NAS mislukt', err);
@@ -1137,6 +1150,51 @@ function canvasToThumbImage(canvas) {
   });
 }
 
+// ---------- lokale miniatuur-cache (IndexedDB) ----------
+// Voorkomt dat dezelfde set (bv. bij hervatten of opnieuw openen) telkens opnieuw helemaal
+// gerenderd moet worden — dat was met honderden pagina's veel te tijdrovend. De cache leeft
+// alleen op dít apparaat/deze browser (geen NAS-verkeer nodig om 'm te gebruiken).
+const THUMB_DB_NAME = 'brickrewind-thumbs';
+const THUMB_STORE = 'thumbs';
+let thumbDbPromise = null;
+function openThumbDb() {
+  if (thumbDbPromise) return thumbDbPromise;
+  thumbDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(THUMB_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(THUMB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return thumbDbPromise;
+}
+async function thumbCacheGet(key) {
+  try {
+    const db = await openThumbDb();
+    return await new Promise((resolve) => {
+      const req = db.transaction(THUMB_STORE, 'readonly').objectStore(THUMB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+async function thumbCacheSet(key, value) {
+  try {
+    const db = await openThumbDb();
+    await new Promise((resolve) => {
+      const tx = db.transaction(THUMB_STORE, 'readwrite');
+      tx.objectStore(THUMB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (e) { /* niet kritiek, dan render je gewoon opnieuw een volgende keer */ }
+}
+// byteLength van de bron-PDF fungeert als lichte "versie"-check: verandert het bestand
+// (nieuwe download, andere druk), dan verandert de bestandsgrootte vrijwel zeker mee, en
+// wordt de oude cache-entry vanzelf genegeerd in plaats van een verouderde miniatuur te tonen.
+function thumbCacheKey(setnr, docIndex, pageNumInDoc, byteLength) {
+  return `${setnr}::${docIndex}::${pageNumInDoc}::${byteLength}`;
+}
+
 async function buildPageGrid() {
   pageMeta = new Array(totalPages);
   hasFinishedNumbering = false;
@@ -1153,26 +1211,38 @@ async function buildPageGrid() {
   let nextIndex = 1;
   let completed = 0;
 
+  const setnrForCache = setnrInput.value.trim() || 'onbekend';
+  let cacheHits = 0;
+
   async function worker() {
     while (true) {
       const i = nextIndex++;
       if (i > totalPages) return;
-      let canvas;
-      try {
-        canvas = await renderPageToCanvas(i, THUMB_SCALE, true);
-      } catch (err) {
-        console.warn('Render mislukt voor pagina', i, err);
-        canvas = errorThumbCanvas();
+      const ref = pageDocMap[i - 1];
+      const cacheKey = thumbCacheKey(setnrForCache, ref.docIndex, ref.pageNumInDoc, docByteLengths[ref.docIndex] || 0);
+      let thumb, w, h;
+      const cached = await thumbCacheGet(cacheKey);
+      if (cached && cached.thumb) {
+        thumb = cached.thumb; w = cached.w; h = cached.h;
+        cacheHits++;
+      } else {
+        let canvas;
+        try {
+          canvas = await renderPageToCanvas(i, THUMB_SCALE, true);
+        } catch (err) {
+          console.warn('Render mislukt voor pagina', i, err);
+          canvas = errorThumbCanvas();
+        }
+        thumb = await canvasToThumbImage(canvas);
+        w = canvas.width; h = canvas.height;
+        thumbCacheSet(cacheKey, { thumb, w, h }); // fire-and-forget, hoeft niet af te wachten
       }
-      const thumb = await canvasToThumbImage(canvas);
       const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
-      pageMeta[i - 1] = {
-        index: i, type, bagNumber: 1, bagLabel: 1, docIndex: pageDocMap[i - 1].docIndex,
-        thumb, w: canvas.width, h: canvas.height
-      };
+      pageMeta[i - 1] = { index: i, type, bagNumber: 1, bagLabel: 1, docIndex: ref.docIndex, thumb, w, h };
       completed++;
       if (completed % 8 === 0 || completed === totalPages) {
-        statusEl.textContent = `Thumbnails renderen… pagina ${completed} / ${totalPages}`;
+        statusEl.textContent = `Thumbnails renderen… pagina ${completed} / ${totalPages}` +
+          (cacheHits ? ` (${cacheHits} al uit eerdere keer hergebruikt)` : '');
       }
       await new Promise(r => setTimeout(r, 0)); // ademruimte voor de UI-thread
     }
@@ -1181,9 +1251,10 @@ async function buildPageGrid() {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalPages) }, () => worker()));
 
   renumberBags();
-  statusEl.textContent = `Klaar. ${totalPages} pagina's ingeladen. Klik "Zakjes nummeren starten" en klik daarna ` +
-    `de zakje-pagina's in volgorde aan. Twijfel je aan een miniatuur? Klik het ↻-knopje erop om 'm opnieuw te ` +
-    `renderen.`;
+  statusEl.textContent = `Klaar. ${totalPages} pagina's ingeladen` +
+    (cacheHits ? ` (${cacheHits} hergebruikt van een eerdere keer, dus sneller)` : '') +
+    `. Klik "Zakjes nummeren starten" en klik daarna de zakje-pagina's in volgorde aan. Twijfel je aan een ` +
+    `miniatuur? Klik het ↻-knopje erop om 'm opnieuw te renderen.`;
   renderGrid();
 }
 
@@ -1239,6 +1310,9 @@ function renderGrid() {
         const canvas = await renderPageToCanvas(p.index, THUMB_SCALE, true);
         p.thumb = await canvasToThumbImage(canvas);
         p.w = canvas.width; p.h = canvas.height;
+        const setnrForCache = setnrInput.value.trim() || 'onbekend';
+        const cacheKey = thumbCacheKey(setnrForCache, p.docIndex, pageDocMap[p.index - 1].pageNumInDoc, docByteLengths[p.docIndex] || 0);
+        thumbCacheSet(cacheKey, { thumb: p.thumb, w: p.w, h: p.h });
       } catch (err) {
         console.warn('Handmatig verversen mislukt voor pagina', p.index, err);
       }
@@ -1496,7 +1570,7 @@ async function showViewer(startIdx) {
 
 document.getElementById('exitFocusBtn').addEventListener('click', () => {
   document.body.classList.remove('viewer-focus');
-  showPhase('markSection');
+  showPhase('phaseChoice');
 });
 
 function buildFilmstrip() {
@@ -1618,9 +1692,17 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     setnrInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  doneSet = new Set();
   ombouwFinished = true;
-  if (await generateReversedSteps()) { await showViewer(0); saveProgress(); }
+  // Alleen valideren/berekenen (vangt bv. "geen enkel zakje gemarkeerd" af) — fase 1 opent
+  // bewust nooit de sloopgids zelf, dat is exclusief voor fase 2 ("Beginnen/verdergaan").
+  if (!(await generateReversedSteps())) { ombouwFinished = false; return; }
+  await saveProgress();
+  showPhase('phaseChoice');
+  const msg = document.getElementById('phaseChoiceMessage');
+  msg.style.display = 'block';
+  const label = setnaamInput.value.trim() || setnrInput.value.trim();
+  msg.innerHTML = `✓ <b>${label}</b> is omgebouwd en opgeslagen in de bibliotheek. Klik op "Beginnen / ` +
+    `verdergaan" om te beginnen met slopen.`;
 });
 
 // ---------- resume flow ----------
@@ -1642,6 +1724,12 @@ async function checkForResumableProgress() {
   } else {
     banner.style.display = 'none';
     pendingResume = null;
+    if (saved) {
+      console.warn('Opgeslagen voortgang gevonden maar vorm komt niet overeen', {
+        savedTotalPages: saved.totalPages, actualTotalPages: totalPages,
+        savedDocPageCounts: saved.docPageCounts, actualDocPageCounts: pdfDocs.map(d => d.numPages),
+      });
+    }
   }
   return sameShape ? saved : null;
 }
@@ -1696,6 +1784,7 @@ document.getElementById('gotoBuildBtn').addEventListener('click', () => {
   loadInProgressList();
 });
 document.getElementById('buildBackBtn').addEventListener('click', () => { stopNasFilePoll(); showPhase('phaseChoice'); });
+document.getElementById('markBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
 document.getElementById('libraryBackBtn').addEventListener('click', () => showPhase('phaseChoice'));
 
 document.getElementById('gotoLibraryBtn').addEventListener('click', () => {
@@ -1759,37 +1848,11 @@ async function openFromLibrary(setnr, setnaam) {
   statusEl.textContent = 'Bibliotheekgegevens ophalen…';
   try {
     const entryResp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr));
-    if (!entryResp.ok) throw new Error('Bibliotheekgegevens ophalen mislukt (HTTP ' + entryResp.status + ')');
-    const entry = await entryResp.json();
-    if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
-
-    statusEl.textContent = 'PDF-bestanden ophalen van de NAS…';
-    const listResp = await fetch(BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
-      '&naam=' + encodeURIComponent(setnaam || ''));
-    if (!listResp.ok) throw new Error('Bestandenlijst ophalen mislukt (HTTP ' + listResp.status + ')');
-    const listing = await listResp.json();
-    if (!listing.files || !listing.files.length) {
-      throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
+    if (entryResp.ok) {
+      const entry = await entryResp.json();
+      if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
     }
-    const buffers = [];
-    for (const f of listing.files) {
-      const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
-      if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
-      buffers.push(await fileResp.arrayBuffer());
-    }
-
-    // loadPdfBuffers bouwt eerst een "beste gok"-indeling en checkt daarna zelf (via
-    // checkForResumableProgress) of er al opgeslagen voortgang bestaat voor dit setnummer —
-    // wat hier per definitie het geval is, dus we passen die meteen automatisch toe.
-    await loadPdfBuffers(buffers);
-    const saved = await checkForResumableProgress();
-    if (saved) {
-      await applyResume(saved);
-      document.getElementById('resumeBanner').style.display = 'none';
-    } else {
-      statusEl.textContent = 'PDF\'s geladen, maar de opgeslagen zakjes-indeling paste niet meer (bv. andere ' +
-        'PDF-versie). Controleer de nummering hieronder.';
-    }
+    await loadSetFromNas(setnr, setnaam || '');
   } catch (err) {
     console.error(err);
     statusEl.textContent = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
