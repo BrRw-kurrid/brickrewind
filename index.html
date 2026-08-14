@@ -448,6 +448,20 @@
   .lego-deeplink:hover{color:#9c2f1c; border-color:#9c2f1c;}
 
   /* --- Startscherm: twee-fasen-keuze --- */
+  .library-check{margin-bottom:18px;}
+  .library-check label{display:block; font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;}
+  .library-check input{
+    width:100%; box-sizing:border-box; padding:12px 14px; font-family:var(--mono); font-size:15px;
+    border:2px solid var(--ink); border-radius:999px; background:var(--card);
+  }
+  #libraryCheckResult{
+    margin-top:8px; padding:10px 14px; border-radius:10px; font-size:13px; border:1px solid var(--line);
+    background:var(--paper);
+  }
+  #libraryCheckResult.found{border-color:var(--bag-teal); color:#0d5c4f;}
+  #libraryCheckResult.notfound{border-color:var(--line); color:var(--ink-soft);}
+  #libraryCheckResult.error{border-color:var(--brick-red); color:#8a2a1a;}
+
   .phase-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:4px;}
   .phase-card{
     text-align:left; border:2px solid var(--ink); border-radius:14px; padding:22px 20px;
@@ -512,6 +526,12 @@
 
   <section id="phaseChoice">
     <div id="phaseChoiceMessage" class="hint" style="display:none; margin-bottom:14px; padding:12px 14px; background:var(--paper); border:1px solid var(--bag-teal); border-radius:10px;"></div>
+
+    <div class="library-check">
+      <label for="libraryCheckInput">Staat een setnummer al in de bibliotheek?</label>
+      <input type="text" id="libraryCheckInput" placeholder="Setnummer intikken om te checken, bv. 42172" autocomplete="off">
+      <div id="libraryCheckResult" style="display:none;"></div>
+    </div>
     <div class="phase-cards">
       <button type="button" class="phase-card" id="gotoBuildBtn">
         <div class="phase-card-title">Set ombouwen</div>
@@ -537,12 +557,6 @@
 
   <section id="buildSection" style="display:none;">
     <button type="button" class="ghost back-btn" id="buildBackBtn">← Terug naar start</button>
-
-    <div id="inProgressBlock" style="display:none;">
-      <h2 style="margin-top:10px;">Verder met een onafgeronde set</h2>
-      <div id="inProgressList" class="library-list"></div>
-      <p class="hint" style="margin:10px 0 0;">Of begin hieronder met een nieuwe set.</p>
-    </div>
 
     <div class="hero-panel">
       <div class="hero-deco" aria-hidden="true">
@@ -617,15 +631,11 @@
     <div class="step-eyebrow"><span class="num">2</span> Zakjes nummeren &amp; pagina's uitsluiten</div>
     <h2>Zet de handleiding klaar voor de sloopgids</h2>
 
-    <div class="resume-banner" id="resumeBanner">
-      <b>Eerdere voortgang gevonden</b>
-      <span id="resumeText"></span>
-      <div class="btns">
-        <button class="go" id="resumeContinueBtn">Doorgaan waar ik gebleven was</button>
-        <button class="ghost" id="resumeIgnoreBtn">Negeren, opnieuw beginnen</button>
-      </div>
-    </div>
-
+    <p class="hint" style="background:#FBE3DD; border:1px solid var(--brick-red); color:#8a2a1a; border-radius:10px; padding:10px 14px;">
+      ⚠ Er wordt hier <b>niets tussentijds opgeslagen</b>. Zolang je dit tabblad open laat staan, blijft je werk
+      gewoon staan als je heen en weer navigeert — maar sluit je de app af vóór je op "Klaar" hebt geklikt, dan
+      ben je je nummering en uitsluitingen kwijt en begin je opnieuw.
+    </p>
     <p class="hint">
       Markeer op welke pagina's een nieuw zakje begint, en sluit pagina's uit die niet bij een bouwstap horen
       (voorblad, onderdelenoverzicht, tussenpagina's). Beide gebeuren op een eigen, overzichtelijk scherm met
@@ -1012,7 +1022,6 @@ async function clearProgress() {
   try {
     await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr), { method: 'DELETE' });
     statusEl.textContent = 'Voortgang gewist in de bibliotheek voor set ' + setnr + '.';
-    document.getElementById('resumeBanner').style.display = 'none';
   } catch (e) {
     statusEl.textContent = 'Wissen mislukt: ' + e.message;
   }
@@ -1038,7 +1047,6 @@ async function loadPdfBuffers(buffers) {
   document.getElementById('numberingPanel').style.display = 'block';
   document.getElementById('excludingPanel').style.display = 'none';
   showPhase('markSection');
-  await checkForResumableProgress();
 }
 
 // ---------- laden rechtstreeks vanaf de NAS-downloadmap van deze set ----------
@@ -1068,14 +1076,7 @@ async function loadSetFromNas(setnr, setnaam) {
     hint.textContent = '';
     hint.style.display = 'none';
     await loadPdfBuffers(buffers);
-    const saved = await checkForResumableProgress();
-    if (saved) {
-      await applyResume(saved);
-      document.getElementById('resumeBanner').style.display = 'none';
-    } else {
-      statusEl.textContent = `${buffers.length} PDF('s) geladen. Geen (passende) eerdere voortgang gevonden — ` +
-        `begin bij "Zakjes nummeren".`;
-    }
+    statusEl.textContent = `${buffers.length} PDF('s) geladen. Begin bij "Zakjes nummeren".`;
     return true;
   } catch (err) {
     console.warn('Laden vanaf NAS mislukt', err);
@@ -1099,29 +1100,6 @@ document.getElementById('loadFromNasBtn').addEventListener('click', async () => 
   document.getElementById('loadFromNasBtn').disabled = true;
   await loadSetFromNas(setnr, setnaamInput.value.trim());
 });
-
-// ---------- fase 1, uitbreiding: verder met een set waarvan het ombouwen nog niet is afgerond ----------
-async function loadInProgressList() {
-  const block = document.getElementById('inProgressBlock');
-  const list = document.getElementById('inProgressList');
-  try {
-    const sets = (await fetchLibrarySets()).filter((s) => !s.finished);
-    if (!sets.length) { block.style.display = 'none'; return; }
-    block.style.display = 'block';
-    renderLibraryCards(list, sets, '', (setnr, setnaam) => resumeBuildingSet(setnr, setnaam));
-  } catch (err) {
-    console.warn('Onafgeronde sets ophalen mislukt', err);
-    block.style.display = 'none';
-  }
-}
-
-async function resumeBuildingSet(setnr, setnaam) {
-  setnrInput.value = setnr;
-  setnaamInput.value = setnaam || '';
-  updateLegoDeeplink();
-  statusEl.textContent = 'PDF\'s ophalen van de NAS…';
-  await loadSetFromNas(setnr, setnaam);
-}
 
 async function renderPageToCanvas(globalIndex, scale, cleanupAfter) {
   const ref = pageDocMap[globalIndex - 1];
@@ -1353,7 +1331,6 @@ function cycleType(i) {
     renumberBags();
     renderGrid();
     updateNumberingStatus();
-    scheduleSave();
     return;
   }
 
@@ -1366,7 +1343,6 @@ function cycleType(i) {
     p.type = (p.type === 'skip') ? 'step' : 'skip';
     renumberBags();
     renderGrid();
-    scheduleSave();
     return;
   }
 
@@ -1387,7 +1363,6 @@ function cycleType(i) {
   }
   renumberBags();
   renderGrid();
-  scheduleSave();
 }
 
 function renumberBags() {
@@ -1423,9 +1398,8 @@ numberBagsBtn.addEventListener('click', () => {
   if (!numberingMode) {
     hasFinishedNumbering = true;
     const bagPages = pageMeta.filter(p => p.type === 'bag');
-    statusEl.textContent = `Zakjes nummeren gestopt — ${bagPages.length} zakje(s) gemarkeerd, bewaard.`;
+    statusEl.textContent = `Zakjes nummeren gestopt — ${bagPages.length} zakje(s) gemarkeerd.`;
     renderGrid();
-    saveProgress();
   } else {
     renderGrid();
   }
@@ -1458,8 +1432,7 @@ excludeBagsBtn.addEventListener('click', () => {
     : '';
   if (!excludingMode) {
     const skipped = pageMeta.filter(p => p.type === 'skip').length;
-    statusEl.textContent = `Uitsluiten gestopt — ${skipped} pagina('s) staan nu op "overslaan", bewaard.`;
-    saveProgress();
+    statusEl.textContent = `Uitsluiten gestopt — ${skipped} pagina('s) staan nu op "overslaan".`;
   }
   renderGrid();
   updateNumberingStatus();
@@ -1533,7 +1506,6 @@ document.getElementById('applyExcludeRangeBtn').addEventListener('click', () => 
   });
   renumberBags();
   renderGrid();
-  saveProgress();
   if (count > 0) {
     excludeRangeLog.push(`${count} pagina('s) uitgesloten (handleiding ${docSel}, p.${from}–${to}).`);
     renderExcludeRangeStatus();
@@ -1715,69 +1687,6 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     `verdergaan" om te beginnen met slopen.`;
 });
 
-// ---------- resume flow ----------
-let pendingResume = null;
-
-async function checkForResumableProgress() {
-  const saved = await loadProgress();
-  const banner = document.getElementById('resumeBanner');
-  const sameShape = saved && saved.totalPages === totalPages &&
-    JSON.stringify(saved.docPageCounts || []) === JSON.stringify(pdfDocs.map(d => d.numPages));
-  if (sameShape) {
-    pendingResume = saved;
-    const when = new Date(saved.savedAt).toLocaleString('nl-NL');
-    document.getElementById('resumeText').textContent =
-      `Opgeslagen op ${when}${saved.setnaam ? ' voor ' + saved.setnaam : ''} — ${saved.done.length} stap(pen) ` +
-      `al afgerond. Zelfde PDF('s) gedetecteerd (${saved.totalPages} pagina's).`;
-    banner.style.display = 'block';
-    if (saved.setnaam && !setnaamInput.value.trim()) setnaamInput.value = saved.setnaam;
-  } else {
-    banner.style.display = 'none';
-    pendingResume = null;
-    if (saved) {
-      console.warn('Opgeslagen voortgang gevonden maar vorm komt niet overeen', {
-        savedTotalPages: saved.totalPages, actualTotalPages: totalPages,
-        savedDocPageCounts: saved.docPageCounts, actualDocPageCounts: pdfDocs.map(d => d.numPages),
-      });
-    }
-  }
-  return sameShape ? saved : null;
-}
-
-async function applyResume(saved) {
-  if (!saved || !saved.marks) return false;
-  const map = new Map(saved.marks.map(m => [m.i, m]));
-  pageMeta.forEach(p => {
-    const m = map.get(p.index);
-    if (m) { p.type = m.t; p.bagNumber = m.b; p.bagLabel = (m.l !== undefined ? m.l : m.b); }
-  });
-  document.getElementById('parallelNumberingCheckbox').checked = !!saved.parallelNumbering;
-
-  if (saved.finished) {
-    ombouwFinished = true;
-    hasFinishedNumbering = true;
-    renderGrid();
-    if (await generateReversedSteps()) {
-      doneSet = new Set(saved.done || []);
-      await showViewer(saved.lastIdx || 0);
-      statusEl.textContent = 'Voortgang hersteld — sloopgids geopend op de plek waar je gebleven was.';
-      return true;
-    }
-    return false;
-  }
-
-  // Nog niet klaargemeld met ombouwen — terug naar het grid-scherm, niet naar de sloopgids,
-  // anders zou er een sloopgids gegenereerd worden op basis van onvolledige zakjes-indeling.
-  ombouwFinished = false;
-  hasFinishedNumbering = false;
-  renderGrid();
-  showPhase('gridPage');
-  document.getElementById('numberingPanel').style.display = 'block';
-  document.getElementById('excludingPanel').style.display = 'none';
-  statusEl.textContent = 'Ga verder met nummeren/uitsluiten waar je gebleven was — nog niet klaargemeld.';
-  return true;
-}
-
 // ---------- Fase-navigatie: startscherm met twee knoppen ----------
 function showPhase(id) {
   ['phaseChoice', 'librarySection', 'buildSection', 'markSection', 'gridPage', 'viewer'].forEach((sid) => {
@@ -1789,9 +1698,40 @@ function showPhase(id) {
   if (id === 'gridPage') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// ---------- startscherm: direct checken of een setnummer al in de bibliotheek staat ----------
+let libraryCheckDebounce = null;
+document.getElementById('libraryCheckInput').addEventListener('input', () => {
+  clearTimeout(libraryCheckDebounce);
+  const val = document.getElementById('libraryCheckInput').value.trim();
+  const result = document.getElementById('libraryCheckResult');
+  if (!val) { result.style.display = 'none'; return; }
+  result.style.display = 'block';
+  result.className = '';
+  result.textContent = 'Checken…';
+  libraryCheckDebounce = setTimeout(async () => {
+    try {
+      const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(val));
+      if (resp.ok) {
+        const entry = await resp.json();
+        result.className = 'found';
+        const pieces = entry.brickset && entry.brickset.pieces ? ` · ${entry.brickset.pieces} onderdelen` : '';
+        result.innerHTML = `✓ <b>${entry.setnaam || val}</b> staat al in de bibliotheek${pieces} — klik op ` +
+          `"Beginnen / verdergaan" om te slopen.`;
+      } else if (resp.status === 404) {
+        result.className = 'notfound';
+        result.textContent = 'Nog niet in de bibliotheek — kies "Set ombouwen" om te beginnen.';
+      } else {
+        throw new Error('HTTP ' + resp.status);
+      }
+    } catch (err) {
+      result.className = 'error';
+      result.textContent = `Kon niet checken (${err.message}). Zit dit apparaat op hetzelfde wifi-netwerk als de NAS?`;
+    }
+  }, 400);
+});
+
 document.getElementById('gotoBuildBtn').addEventListener('click', () => {
   showPhase('buildSection');
-  loadInProgressList();
   if (setnrInput.value.trim()) startNasFilePoll();
 });
 document.getElementById('buildBackBtn').addEventListener('click', () => { stopNasFilePoll(); showPhase('phaseChoice'); });
@@ -1859,27 +1799,72 @@ async function openFromLibrary(setnr, setnaam) {
   statusEl.textContent = 'Bibliotheekgegevens ophalen…';
   try {
     const entryResp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr));
-    if (entryResp.ok) {
-      const entry = await entryResp.json();
-      if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
+    if (!entryResp.ok) throw new Error('Bibliotheekgegevens ophalen mislukt (HTTP ' + entryResp.status + ')');
+    const entry = await entryResp.json();
+    if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
+
+    statusEl.textContent = 'PDF-bestanden ophalen van de NAS…';
+    const listResp = await fetch(BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
+      '&naam=' + encodeURIComponent(setnaam || ''));
+    if (!listResp.ok) throw new Error('Bestandenlijst ophalen mislukt (HTTP ' + listResp.status + ')');
+    const listing = await listResp.json();
+    if (!listing.files || !listing.files.length) {
+      throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
     }
-    await loadSetFromNas(setnr, setnaam || '');
+    const buffers = [];
+    for (const f of listing.files) {
+      const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
+      if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
+      buffers.push(await fileResp.arrayBuffer());
+    }
+
+    // Fase 2 opent altijd meteen de sloopgids — geen tussenstap via het grid-scherm. De
+    // pageMeta wordt rechtstreeks uit de opgeslagen indeling opgebouwd; miniaturen worden
+    // niet vooraf gerenderd (dat is hier niet nodig), de filmstrook laadt ze zelf lazy zodra
+    // ze in beeld komen, met de lokale cache erachter voor snelheid.
+    pdfDocs = []; pageDocMap = []; docByteLengths = [];
+    for (const buf of buffers) {
+      docByteLengths.push(buf.byteLength);
+      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+      pdfDocs.push(doc);
+      const docIndex = pdfDocs.length - 1;
+      for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
+    }
+    totalPages = pageDocMap.length;
+
+    if (entry.totalPages !== totalPages) {
+      statusEl.textContent = `Let op: het aantal pagina's komt niet meer overeen met wat in de bibliotheek ` +
+        `stond (toen ${entry.totalPages}, nu ${totalPages}) — mogelijk een andere PDF-versie. Ga naar "Set ` +
+        `ombouwen" om opnieuw te nummeren.`;
+      return;
+    }
+
+    pageMeta = new Array(totalPages);
+    const map = new Map((entry.marks || []).map(m => [m.i, m]));
+    for (let i = 1; i <= totalPages; i++) {
+      const m = map.get(i);
+      pageMeta[i - 1] = {
+        index: i,
+        type: m ? m.t : 'step',
+        bagNumber: m ? m.b : null,
+        bagLabel: m ? (m.l !== undefined ? m.l : m.b) : null,
+        docIndex: pageDocMap[i - 1].docIndex,
+        thumb: null, w: 0, h: 0,
+      };
+    }
+    document.getElementById('parallelNumberingCheckbox').checked = !!entry.parallelNumbering;
+    ombouwFinished = true;
+    hasFinishedNumbering = true;
+
+    if (await generateReversedSteps()) {
+      doneSet = new Set(entry.done || []);
+      await showViewer(entry.lastIdx || 0);
+    }
   } catch (err) {
     console.error(err);
     statusEl.textContent = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
   }
 }
-
-document.getElementById('resumeIgnoreBtn').addEventListener('click', () => {
-  document.getElementById('resumeBanner').style.display = 'none';
-  pendingResume = null;
-});
-
-document.getElementById('resumeContinueBtn').addEventListener('click', async () => {
-  if (!pendingResume) return;
-  await applyResume(pendingResume);
-  document.getElementById('resumeBanner').style.display = 'none';
-});
 
 // ---------- Openingsmoment: tik om over te slaan, daarna helemaal opruimen ----------
 (function initIntroSplash() {
