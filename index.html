@@ -721,7 +721,6 @@
   <section id="viewer" style="display:none;">
     <div class="row" style="justify-content:space-between; align-items:center;">
       <div class="step-eyebrow" style="margin-bottom:0;"><span class="num">3</span> Demontagegids</div>
-      <button class="ghost" id="exitFocusBtn">← Terug naar zakjes/instellingen</button>
     </div>
     <div class="viewer-title" id="viewerTitle"></div>
     <div class="viewer-top">
@@ -1539,7 +1538,7 @@ async function generateReversedSteps() {
 
 async function showViewer(startIdx) {
   document.body.classList.add('viewer-focus');
-  document.getElementById('viewer').style.display = 'block';
+  showPhase('viewer');
   document.getElementById('totStep').textContent = reversedSteps.length;
   const setnr = setnrInput.value.trim();
   const setnaam = setnaamInput.value.trim();
@@ -1549,11 +1548,6 @@ async function showViewer(startIdx) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   await renderStep(Math.min(Math.max(startIdx || 0, 0), reversedSteps.length - 1));
 }
-
-document.getElementById('exitFocusBtn').addEventListener('click', () => {
-  document.body.classList.remove('viewer-focus');
-  showPhase('phaseChoice');
-});
 
 function buildFilmstrip() {
   const strip = document.getElementById('filmstrip');
@@ -1833,9 +1827,14 @@ async function openFromLibrary(setnr, setnaam) {
     totalPages = pageDocMap.length;
 
     if (entry.totalPages !== totalPages) {
-      statusEl.textContent = `Let op: het aantal pagina's komt niet meer overeen met wat in de bibliotheek ` +
-        `stond (toen ${entry.totalPages}, nu ${totalPages}) — mogelijk een andere PDF-versie. Ga naar "Set ` +
-        `ombouwen" om opnieuw te nummeren.`;
+      const fileList = listing.files.map(f => f.name).join(', ');
+      const msg = `Kan niet automatisch openen: het aantal pagina's komt niet meer overeen met wat in de ` +
+        `bibliotheek stond (toen ${entry.totalPages}, nu ${totalPages}).\n\n` +
+        `Gevonden bestanden in de NAS-map "${listing.folder}": ${fileList}\n\n` +
+        `Controleer of daar precies de juiste PDF('s) staan (geen dubbele of oude testbestanden). Ga daarna ` +
+        `naar "Set ombouwen" om opnieuw te nummeren.`;
+      alert(msg);
+      statusEl.textContent = msg;
       return;
     }
 
@@ -1862,7 +1861,9 @@ async function openFromLibrary(setnr, setnaam) {
     }
   } catch (err) {
     console.error(err);
-    statusEl.textContent = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
+    const msg = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
+    statusEl.textContent = msg;
+    alert(msg);
   }
 }
 
