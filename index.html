@@ -369,6 +369,23 @@
     .intro-center, .intro-piece{animation:none; opacity:1;}
   }
 
+  /* --- Volledig-scherm laadoverlay (bv. bij het openen van een set vanuit de bibliotheek) --- */
+  #libraryLoadOverlay{
+    position:fixed; inset:0; z-index:9997; background:var(--ink); color:var(--paper);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; text-align:center; padding:24px;
+  }
+  .spinner{
+    width:46px; height:46px; border-radius:50%;
+    border:4px solid rgba(255,255,255,.22); border-top-color:var(--stud-yellow);
+    animation: brSpin 0.9s linear infinite;
+  }
+  @keyframes brSpin{ to{ transform:rotate(360deg); } }
+  #libraryLoadStatus{font-family:var(--mono); font-size:14px; line-height:1.5; max-width:340px;}
+  @media (prefers-reduced-motion: reduce){
+    .spinner{animation-duration:2.4s;}
+  }
+
   /* --- Sectie 1: Builder-stijl kopvlak (kleurvlak + zwevende blokjes + merkje) + pilvormige zoekbalk --- */
   .hero-panel{
     position:relative; overflow:hidden;
@@ -507,6 +524,10 @@
     <div class="intro-word">BrickRewind</div>
     <div class="intro-tag">// terug naar het zakje</div>
   </div>
+</div>
+<div id="libraryLoadOverlay" style="display:none;">
+  <div class="spinner"></div>
+  <div id="libraryLoadStatus"></div>
 </div>
 <div class="wrap">
 
@@ -1785,19 +1806,29 @@ async function loadLibraryList() {
   }
 }
 
+function showLibraryLoadOverlay(text) {
+  document.getElementById('libraryLoadOverlay').style.display = 'flex';
+  document.getElementById('libraryLoadStatus').textContent = text;
+}
+function updateLibraryLoadOverlay(text) {
+  document.getElementById('libraryLoadStatus').textContent = text;
+}
+function hideLibraryLoadOverlay() {
+  document.getElementById('libraryLoadOverlay').style.display = 'none';
+}
+
 async function openFromLibrary(setnr, setnaam) {
-  showPhase('buildSection');
   setnrInput.value = setnr;
   setnaamInput.value = setnaam || '';
   updateLegoDeeplink();
-  statusEl.textContent = 'Bibliotheekgegevens ophalen…';
+  showLibraryLoadOverlay('Bibliotheekgegevens ophalen…');
   try {
     const entryResp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr));
     if (!entryResp.ok) throw new Error('Bibliotheekgegevens ophalen mislukt (HTTP ' + entryResp.status + ')');
     const entry = await entryResp.json();
     if (entry.brickset) { lastBricksetHit = entry.brickset; showSetResult(entry.brickset); }
 
-    statusEl.textContent = 'PDF-bestanden ophalen van de NAS…';
+    updateLibraryLoadOverlay('Bestandenlijst ophalen…');
     const listResp = await fetch(BRICKSET_PROXY_BASE + '/files?set=' + encodeURIComponent(setnr) +
       '&naam=' + encodeURIComponent(setnaam || ''));
     if (!listResp.ok) throw new Error('Bestandenlijst ophalen mislukt (HTTP ' + listResp.status + ')');
@@ -1805,42 +1836,42 @@ async function openFromLibrary(setnr, setnaam) {
     if (!listing.files || !listing.files.length) {
       throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
     }
-    const buffers = [];
-    for (let i = 0; i < listing.files.length; i++) {
-      const f = listing.files[i];
-      statusEl.textContent = `Bestand ${i + 1}/${listing.files.length} downloaden van de NAS ` +
-        `(${f.name})… dit kan bij grote PDF's zeker 10–20 seconden duren, blijf even op dit scherm.`;
+
+    // Alle bestanden tegelijk downloaden (niet na elkaar) — bij meerdere boekjes scheelt dat
+    // flink in wachttijd, want dan wacht je op het traagste bestand i.p.v. op de optelsom.
+    updateLibraryLoadOverlay(
+      `${listing.files.length} PDF('s) tegelijk downloaden van de NAS… bij grote bestanden kan dit ` +
+      `nog altijd zo'n 10 seconden duren.`
+    );
+    const buffers = await Promise.all(listing.files.map(async (f) => {
       const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
       if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
-      buffers.push(await fileResp.arrayBuffer());
-    }
+      return fileResp.arrayBuffer();
+    }));
 
     // Fase 2 opent altijd meteen de sloopgids — geen tussenstap via het grid-scherm. De
     // pageMeta wordt rechtstreeks uit de opgeslagen indeling opgebouwd; miniaturen worden
     // niet vooraf gerenderd (dat is hier niet nodig), de filmstrook laadt ze zelf lazy zodra
     // ze in beeld komen, met de lokale cache erachter voor snelheid.
-    pdfDocs = []; pageDocMap = []; docByteLengths = [];
-    for (let i = 0; i < buffers.length; i++) {
-      const buf = buffers[i];
-      statusEl.textContent = `PDF ${i + 1}/${buffers.length} openen…`;
-      docByteLengths.push(buf.byteLength);
-      const doc = await pdfjsLib.getDocument({ data: buf }).promise;
-      pdfDocs.push(doc);
-      const docIndex = pdfDocs.length - 1;
+    updateLibraryLoadOverlay(`PDF('s) openen…`);
+    docByteLengths = buffers.map((b) => b.byteLength);
+    pdfDocs = await Promise.all(buffers.map((buf) => pdfjsLib.getDocument({ data: buf }).promise));
+    pageDocMap = [];
+    pdfDocs.forEach((doc, docIndex) => {
       for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
-    }
+    });
     totalPages = pageDocMap.length;
-    statusEl.textContent = 'Sloopgids openen…';
 
     if (entry.totalPages !== totalPages) {
       const fileList = listing.files.map(f => f.name).join(', ');
+      hideLibraryLoadOverlay();
       const msg = `Kan niet automatisch openen: het aantal pagina's komt niet meer overeen met wat in de ` +
         `bibliotheek stond (toen ${entry.totalPages}, nu ${totalPages}).\n\n` +
         `Gevonden bestanden in de NAS-map "${listing.folder}": ${fileList}\n\n` +
         `Controleer of daar precies de juiste PDF('s) staan (geen dubbele of oude testbestanden). Ga daarna ` +
         `naar "Set ombouwen" om opnieuw te nummeren.`;
       alert(msg);
-      statusEl.textContent = msg;
+      showPhase('phaseChoice');
       return;
     }
 
@@ -1863,13 +1894,17 @@ async function openFromLibrary(setnr, setnaam) {
 
     if (await generateReversedSteps()) {
       doneSet = new Set(entry.done || []);
+      hideLibraryLoadOverlay();
       await showViewer(entry.lastIdx || 0);
+    } else {
+      hideLibraryLoadOverlay();
+      showPhase('phaseChoice');
     }
   } catch (err) {
     console.error(err);
-    const msg = 'Laden vanuit de bibliotheek mislukt: ' + err.message;
-    statusEl.textContent = msg;
-    alert(msg);
+    hideLibraryLoadOverlay();
+    alert('Laden vanuit de bibliotheek mislukt: ' + err.message);
+    showPhase('phaseChoice');
   }
 }
 
