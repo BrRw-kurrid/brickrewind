@@ -1806,7 +1806,10 @@ async function openFromLibrary(setnr, setnaam) {
       throw new Error(`Geen PDF's gevonden in map "${listing.folder}" op de NAS.`);
     }
     const buffers = [];
-    for (const f of listing.files) {
+    for (let i = 0; i < listing.files.length; i++) {
+      const f = listing.files[i];
+      statusEl.textContent = `Bestand ${i + 1}/${listing.files.length} downloaden van de NAS ` +
+        `(${f.name})… dit kan bij grote PDF's zeker 10–20 seconden duren, blijf even op dit scherm.`;
       const fileResp = await fetch(BRICKSET_PROXY_BASE + f.url);
       if (!fileResp.ok) throw new Error(`${f.name}: HTTP ${fileResp.status}`);
       buffers.push(await fileResp.arrayBuffer());
@@ -1817,7 +1820,9 @@ async function openFromLibrary(setnr, setnaam) {
     // niet vooraf gerenderd (dat is hier niet nodig), de filmstrook laadt ze zelf lazy zodra
     // ze in beeld komen, met de lokale cache erachter voor snelheid.
     pdfDocs = []; pageDocMap = []; docByteLengths = [];
-    for (const buf of buffers) {
+    for (let i = 0; i < buffers.length; i++) {
+      const buf = buffers[i];
+      statusEl.textContent = `PDF ${i + 1}/${buffers.length} openen…`;
       docByteLengths.push(buf.byteLength);
       const doc = await pdfjsLib.getDocument({ data: buf }).promise;
       pdfDocs.push(doc);
@@ -1825,6 +1830,7 @@ async function openFromLibrary(setnr, setnaam) {
       for (let p = 1; p <= doc.numPages; p++) pageDocMap.push({ docIndex, pageNumInDoc: p });
     }
     totalPages = pageDocMap.length;
+    statusEl.textContent = 'Sloopgids openen…';
 
     if (entry.totalPages !== totalPages) {
       const fileList = listing.files.map(f => f.name).join(', ');
