@@ -225,10 +225,11 @@
   }
   .pg.type-step{border-color:var(--line);}
   .pg.type-step .tagchip{background:rgba(255,255,255,.9); color:var(--ink-soft);}
-  .pg.type-bag{border-color:var(--bag-teal); border-width:3px;}
-  .pg.type-bag .tagchip{background:var(--bag-teal); color:#fff;}
+  .pg.bagstart{border-color:var(--bag-teal); border-width:3px;}
+  .pg.bagstart .tagchip{background:var(--bag-teal); color:#fff;}
   .pg.type-skip{opacity:.4;}
   .pg.type-skip .tagchip{background:var(--ink-soft); color:#fff;}
+  .pg.type-skip.bagstart{opacity:.7;} /* een zakje-start die je toch uitsluit blijft goed zichtbaar */
   .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--ink-soft);}
   .legend span{display:inline-flex; align-items:center; gap:6px;}
   .swatch{width:12px;height:12px;border-radius:3px; display:inline-block;}
@@ -682,7 +683,9 @@
       <p class="hint" style="margin:0;">
         Klik in volgorde op de miniaturen waarop een genummerd zakje te zien is: de eerste klik wordt automatisch
         zakje 1, de tweede zakje 2, enzovoort — ook over meerdere handleidingen heen. Per ongeluk verkeerd geklikt?
-        Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te maken.
+        Klik dezelfde miniatuur nogmaals aan om 'm ongedaan te maken. Een zakje-markering staat los van of de
+        pagina zelf een bouwstap is of wordt overgeslagen — een pagina met zowel het zakje-icoon als echte
+        bouwstappen erop markeer je hier gewoon als zakje-start; die bouwstappen blijven dan meetellen.
       </p>
       <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin-top:10px; cursor:pointer;">
         <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
@@ -693,8 +696,9 @@
 
     <div id="excludingPanel" class="mode-panel" style="display:none;">
       <p class="hint" style="margin:0;">
-        Klik elke pagina aan die je wilt uitsluiten (niet bij een bouwstap hoort) — nogmaals klikken maakt het
-        ongedaan. Handig voor losse, verspreide pagina's.
+        Klik elke pagina aan die je wilt uitsluiten (niet bij een bouwstap hoort, bv. een kale scheidingspagina
+        of onderdelenoverzicht) — nogmaals klikken maakt het ongedaan. Dit kan ook op een pagina die je al als
+        zakje-start hebt gemarkeerd, voor het geval die verder geen bruikbare bouwstappen bevat.
       </p>
       <div id="excludingStatus"></div>
       <div class="exclude-range-row">
@@ -714,7 +718,7 @@
       </div>
       <p class="hint" style="margin:8px 0 0;">
         Sneller voor een aaneengesloten reeks, zoals de eerste of laatste pagina's van een handleiding. Bestaande
-        zakje-markeringen in het bereik blijven staan (die worden niet overschreven).
+        zakje-markeringen in het bereik blijven gewoon staan.
       </p>
       <div id="excludeRangeStatus" style="font-family:var(--mono); font-size:12px; margin-top:6px; min-height:16px;"></div>
     </div>
@@ -722,13 +726,14 @@
     <div id="pageGrid"></div>
     <div class="legend">
       <span><i class="swatch" style="background:#fff;border:2px solid var(--line);"></i> Bouwstap</span>
-      <span><i class="swatch" style="background:var(--bag-teal);"></i> Zakje-scheiding</span>
       <span><i class="swatch" style="background:var(--ink-soft);"></i> Overslaan</span>
+      <span><i class="swatch" style="background:var(--bag-teal);"></i> Zakje-start (kan samen met beide bovenstaande)</span>
     </div>
     <p class="hint" style="margin-top:10px;">
       Ook buiten de twee bovenste knoppen om kun je een pagina aanklikken om 'm te wisselen tussen <b>bouwstap</b>
-      → <b>zakje-scheiding</b> → <b>overslaan</b> — handig voor een losse correctie. Pagina's vóór het eerste
-      zakje (voorblad, onderdelenoverzicht) worden automatisch buiten de gids gehouden; het begin en eind van een
+      en <b>overslaan</b> — handig voor een losse correctie (de zakje-start zelf wijzig je altijd via "Zakjes
+      nummeren", dat moet in volgorde blijven gebeuren voor de juiste telling). Pagina's vóór het eerste zakje
+      (voorblad, onderdelenoverzicht) worden automatisch buiten de gids gehouden; het begin en eind van een
       tweede handleiding moet je zelf uitsluiten met bovenstaande knoppen, want dat kan BrickRewind niet
       betrouwbaar herkennen.
     </p>
@@ -790,7 +795,7 @@ let pdfDocs = [];        // pdf.js document objects, in booklet order
 let pageDocMap = [];     // pageDocMap[globalIndex-1] = { docIndex, pageNumInDoc }
 let docByteLengths = []; // docByteLengths[docIndex] = bytegrootte van dat bron-bestand (cache-versiesignaal)
 let totalPages = 0;
-let pageMeta = [];       // { index (global), type:'step'|'bag'|'skip', bagNumber, docIndex, canvas }
+let pageMeta = [];       // { index (global), type:'step'|'skip', isBagStart, bagNumber, bagLabel, docIndex, thumb }
 let reversedSteps = [];
 let curIdx = 0;
 let doneSet = new Set(); // set of original global page indices marked "done"
@@ -994,7 +999,7 @@ async function saveProgress() {
     brickset: lastBricksetHit,
     totalPages,
     docPageCounts: pdfDocs.map(d => d.numPages),
-    marks: pageMeta.map(p => ({ i: p.index, t: p.type, b: p.bagNumber, l: p.bagLabel })),
+    marks: pageMeta.map(p => ({ i: p.index, t: p.type, s: p.isBagStart, b: p.bagNumber, l: p.bagLabel })),
     parallelNumbering: document.getElementById('parallelNumberingCheckbox').checked,
     finished: ombouwFinished,
     done: Array.from(doneSet),
@@ -1246,7 +1251,7 @@ async function buildPageGrid() {
         thumbCacheSet(cacheKey, { thumb, w, h }); // fire-and-forget, hoeft niet af te wachten
       }
       const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
-      pageMeta[i - 1] = { index: i, type, bagNumber: 1, bagLabel: 1, docIndex: ref.docIndex, thumb, w, h };
+      pageMeta[i - 1] = { index: i, type, isBagStart: false, bagNumber: null, bagLabel: null, docIndex: ref.docIndex, thumb, w, h };
       completed++;
       if (completed % 8 === 0 || completed === totalPages) {
         statusEl.textContent = `Thumbnails renderen… pagina ${completed} / ${totalPages}` +
@@ -1281,7 +1286,7 @@ function renderGrid() {
       lastDocIndex = p.docIndex;
     }
     const div = document.createElement('div');
-    div.className = 'pg type-' + p.type;
+    div.className = 'pg type-' + p.type + (p.isBagStart ? ' bagstart' : '');
     div.appendChild(p.thumb);
     const num = document.createElement('div');
     num.className = 'pgnum';
@@ -1293,13 +1298,14 @@ function renderGrid() {
       dl.textContent = 'H' + (p.docIndex + 1);
       div.appendChild(dl);
     }
-    // Keep the grid quiet on large booklets: a bouwstap only gets a "· zakje N" label once numbering
-    // has been finished at least once. Zakje/overslaan pages always show their label — that's the
-    // useful feedback while you're actively clicking through the numbering.
-    let chipText = '';
-    if (p.type === 'bag') chipText = 'ZAKJE ' + (p.bagLabel ?? p.bagNumber);
-    else if (p.type === 'skip') chipText = 'OVERSLAAN';
-    else if (p.type === 'step' && p.bagNumber && hasFinishedNumbering) chipText = 'zakje ' + (p.bagLabel ?? p.bagNumber);
+    // Keep the grid quiet on large booklets: het "· zakje N"-label voor een gewone bouwstap
+    // verschijnt pas zodra er minstens één keer klaar gemeld is met nummeren. Een zakje-start
+    // en "overslaan" tonen hun label altijd — dat is nuttige feedback tijdens het klikken zelf.
+    const chipParts = [];
+    if (p.isBagStart) chipParts.push('ZAKJE ' + (p.bagLabel ?? p.bagNumber));
+    if (p.type === 'skip') chipParts.push('OVERSLAAN');
+    else if (!p.isBagStart && p.bagNumber && hasFinishedNumbering) chipParts.push('zakje ' + (p.bagLabel ?? p.bagNumber));
+    const chipText = chipParts.join(' · ');
     if (chipText) {
       const chip = document.createElement('div');
       chip.className = 'tagchip';
@@ -1337,14 +1343,17 @@ function cycleType(i) {
   const parallel = document.getElementById('parallelNumberingCheckbox').checked;
 
   if (numberingMode) {
-    if (p.type === 'bag') {
-      p.type = 'step'; // klik nogmaals = ongedaan maken
+    if (p.isBagStart) {
+      // Nogmaals klikken = ongedaan maken. Type (stap/overslaan) blijft gewoon staan zoals het was.
+      p.isBagStart = false;
+      p.bagNumber = null;
+      p.bagLabel = null;
     } else {
-      const nextNum = pageMeta.filter(x => x.type === 'bag').length + 1;
+      const nextNum = pageMeta.filter(x => x.isBagStart).length + 1;
       const nextLabel = parallel
-        ? pageMeta.filter(x => x.type === 'bag' && x.docIndex === p.docIndex).length + 1
+        ? pageMeta.filter(x => x.isBagStart && x.docIndex === p.docIndex).length + 1
         : nextNum;
-      p.type = 'bag';
+      p.isBagStart = true;
       p.bagNumber = nextNum;   // intern, uniek over de hele set — bepaalt de bouw-/sloopvolgorde
       p.bagLabel = nextLabel;  // wat we aan jou tonen — matcht het fysieke zakje
     }
@@ -1355,42 +1364,29 @@ function cycleType(i) {
   }
 
   if (excludingMode) {
-    if (p.type === 'bag') {
-      document.getElementById('excludingStatus').textContent =
-        'Dit is een zakje-pagina — gebruik "Zakjes nummeren" om die aan te passen, niet uitsluiten.';
-      return;
-    }
     p.type = (p.type === 'skip') ? 'step' : 'skip';
     renumberBags();
     renderGrid();
     return;
   }
 
-  if (p.type === 'step') {
-    p.type = 'bag';
-    const prevBagNums = pageMeta.filter(x => x.type === 'bag').map(x => x.bagNumber);
-    p.bagNumber = prevBagNums.length ? Math.max(...prevBagNums) + 1 : 1;
-    p.bagLabel = parallel
-      ? pageMeta.filter(x => x.type === 'bag' && x.docIndex === p.docIndex && x !== p).length + 1
-      : p.bagNumber;
-  } else if (p.type === 'bag') {
-    const input = prompt('Zakjenummer voor deze pagina (zoals op het fysieke zakje) — of leeg laten om over te slaan:', p.bagLabel ?? p.bagNumber);
-    if (input === null) { /* annuleren: blijft zakje */ }
-    else if (input.trim() === '') { p.type = 'skip'; }
-    else { p.bagLabel = parseInt(input, 10) || p.bagLabel; }
-  } else {
-    p.type = 'step';
-  }
+  // Buiten beide modi: snelle losse correctie, puur stap ↔ overslaan. Een zakje-start wijzig je
+  // altijd via "Zakjes nummeren" — dat moet in volgorde blijven gebeuren voor de juiste telling.
+  p.type = (p.type === 'skip') ? 'step' : 'skip';
   renumberBags();
   renderGrid();
 }
 
 function renumberBags() {
-  let currentBag = null;   // geen zakje toegewezen totdat de eerste zakje-scheiding is gepasseerd
+  // Elke pagina erft het zakjenummer van de meest recente zakje-start-pagina ervoor — ongeacht of
+  // die pagina zelf een bouwstap of een uitgesloten pagina is. Zo blijven "is dit een zakje-grens"
+  // en "hoort dit bij de sloopgids" twee volledig losse keuzes.
+  let currentBag = null;
   let currentLabel = null;
   for (const p of pageMeta) {
-    if (p.type === 'bag') { currentBag = p.bagNumber; currentLabel = p.bagLabel; }
-    else if (p.type === 'step') { p.bagNumber = currentBag; p.bagLabel = currentLabel; }
+    if (p.isBagStart) { currentBag = p.bagNumber; currentLabel = p.bagLabel; }
+    p.bagNumber = currentBag;
+    p.bagLabel = currentLabel;
   }
 }
 
@@ -1417,7 +1413,7 @@ numberBagsBtn.addEventListener('click', () => {
   document.getElementById('pageGrid').classList.remove('excluding-active');
   if (!numberingMode) {
     hasFinishedNumbering = true;
-    const bagPages = pageMeta.filter(p => p.type === 'bag');
+    const bagPages = pageMeta.filter(p => p.isBagStart);
     statusEl.textContent = `Zakjes nummeren gestopt — ${bagPages.length} zakje(s) gemarkeerd.`;
     renderGrid();
   } else {
@@ -1429,7 +1425,7 @@ numberBagsBtn.addEventListener('click', () => {
 function updateNumberingStatus() {
   const el = document.getElementById('numberingStatus');
   if (!numberingMode) { el.textContent = ''; return; }
-  const nextNum = pageMeta.filter(p => p.type === 'bag').length + 1;
+  const nextNum = pageMeta.filter(p => p.isBagStart).length + 1;
   el.textContent = `Actief — klik de miniatuur van zakje ${nextNum} aan. (Nogmaals klikken op een gemarkeerde pagina maakt 'm ongedaan.)`;
 }
 
@@ -1519,7 +1515,7 @@ document.getElementById('applyExcludeRangeBtn').addEventListener('click', () => 
   let count = 0;
   pageMeta.forEach((p, i) => {
     const ref = pageDocMap[i];
-    if (ref.docIndex === (docSel - 1) && ref.pageNumInDoc >= from && ref.pageNumInDoc <= to && p.type !== 'bag') {
+    if (ref.docIndex === (docSel - 1) && ref.pageNumInDoc >= from && ref.pageNumInDoc <= to) {
       p.type = 'skip';
       count++;
     }
@@ -1879,15 +1875,35 @@ async function openFromLibrary(setnr, setnaam) {
     const map = new Map((entry.marks || []).map(m => [m.i, m]));
     for (let i = 1; i <= totalPages; i++) {
       const m = map.get(i);
+      let type = 'step', isBagStart = false, bagNumber = null, bagLabel = null;
+      if (m) {
+        if (m.s !== undefined) {
+          // Huidig formaat: zakje-start en stap/overslaan zijn al losgekoppeld.
+          type = m.t;
+          isBagStart = !!m.s;
+          bagNumber = m.b;
+          bagLabel = (m.l !== undefined ? m.l : m.b);
+        } else if (m.t === 'bag') {
+          // Ouder formaat (vóór de fix van 13 augustus): 'bag' betekende toen zowel
+          // "hier begint een zakje" als "sla de inhoud van deze pagina over" — waardoor
+          // eventuele echte bouwstappen op zo'n pagina onterecht verdwenen. We laten de
+          // inhoud nu alsnog zien (type 'step'); was het echt een kale scheidingspagina,
+          // sluit 'm dan zelf even uit via "Pagina's uitsluiten".
+          type = 'step';
+          isBagStart = true;
+          bagNumber = m.b;
+          bagLabel = (m.l !== undefined ? m.l : m.b);
+        } else {
+          type = m.t;
+        }
+      }
       pageMeta[i - 1] = {
-        index: i,
-        type: m ? m.t : 'step',
-        bagNumber: m ? m.b : null,
-        bagLabel: m ? (m.l !== undefined ? m.l : m.b) : null,
+        index: i, type, isBagStart, bagNumber, bagLabel,
         docIndex: pageDocMap[i - 1].docIndex,
         thumb: null, w: 0, h: 0,
       };
     }
+    renumberBags();
     document.getElementById('parallelNumberingCheckbox').checked = !!entry.parallelNumbering;
     ombouwFinished = true;
     hasFinishedNumbering = true;
