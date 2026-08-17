@@ -596,7 +596,7 @@
 
     <div class="search-pill">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
-      <input type="text" id="setnr" placeholder="Setnummer, bv. 43279" autocomplete="off">
+      <input type="text" id="setnr" placeholder="Setnummer of (deel van de) naam, bv. 43279 of Retro Radio" autocomplete="off">
       <span class="search-pill-divider"></span>
       <button class="search-pill-btn" id="lookupSetBtn" type="button">Zoek set op</button>
     </div>
@@ -928,34 +928,76 @@ document.getElementById('expectedBookletsInput').addEventListener('input', () =>
 
 document.getElementById('lookupSetBtn').addEventListener('click', async () => {
   const resultBox = document.getElementById('setLookupResult');
-  const setnr = setnrInput.value.trim();
+  const query = setnrInput.value.trim();
   const setnaam = setnaamInput.value.trim();
 
   resultBox.style.display = 'flex';
-  if (!setnr) {
-    resultBox.innerHTML = '<div class="info">Vul een setnummer in om te zoeken.</div>';
+  if (!query) {
+    resultBox.innerHTML = '<div class="info">Vul een setnummer of (een deel van de) setnaam in om te zoeken.</div>';
     return;
   }
 
-  resultBox.innerHTML = '<div class="info">Zoeken via Brickset…</div>';
+  const isPureNumber = /^\d+$/.test(query);
+
+  if (isPureNumber) {
+    resultBox.innerHTML = '<div class="info">Zoeken via Brickset…</div>';
+    try {
+      const url = BRICKSET_PROXY_BASE + '/lookup?set=' + encodeURIComponent(query);
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (resp.status === 404) {
+        resultBox.innerHTML = `<div class="info">Geen resultaat gevonden voor setnummer "${query}" op Brickset. ` +
+          `Probeer eventueel op (een deel van de) naam te zoeken.</div>`;
+        return;
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const hit = await resp.json();
+      showSetResult(hit);
+      if (!setnaam) setnaamInput.value = hit.name;
+      updateLegoDeeplink();
+    } catch (err) {
+      console.warn('Setopzoeken via NAS-proxy mislukt', err);
+      resultBox.innerHTML =
+        `<div class="info">Automatisch zoeken lukte niet (${err.message}). Zit je tablet op hetzelfde wifi-netwerk ` +
+        `als de NAS (${BRICKSET_PROXY_BASE})? En stond er bij de eerste keer een toestemmingsvraagje van Chrome ` +
+        `("verbinden met apparaten op je lokale netwerk") — die moet op Toestaan staan. Je kunt de setnaam ook ` +
+        `gewoon zelf hierboven invullen.</div>`;
+    }
+    return;
+  }
+
+  // Geen zuiver getal ingetikt — zoeken op (deel van de) naam, kan meerdere resultaten geven.
+  resultBox.innerHTML = '<div class="info">Zoeken op naam via Brickset…</div>';
   try {
-    const url = BRICKSET_PROXY_BASE + '/lookup?set=' + encodeURIComponent(setnr);
+    const url = BRICKSET_PROXY_BASE + '/search?q=' + encodeURIComponent(query);
     const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (resp.status === 404) {
-      resultBox.innerHTML = `<div class="info">Geen resultaat gevonden voor setnummer "${setnr}" op Brickset.</div>`;
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    const results = data.results || [];
+    if (!results.length) {
+      resultBox.innerHTML = `<div class="info">Geen sets gevonden voor "${query}".</div>`;
       return;
     }
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const hit = await resp.json();
-    showSetResult(hit);
-    if (!setnaam) setnaamInput.value = hit.name;
+    resultBox.innerHTML = `<div class="set-suggestions" id="nameSearchResults" style="display:block; width:100%;"></div>`;
+    const list = document.getElementById('nameSearchResults');
+    results.forEach((hit) => {
+      const item = document.createElement('div');
+      item.className = 'suggest-item';
+      const img = hit.thumbnail_url || hit.image_url;
+      item.innerHTML =
+        (img ? `<img src="${img}" alt="">` : '') +
+        `<span><span class="num">${hit.number}</span>${hit.name}${hit.year ? ' (' + hit.year + ')' : ''}</span>`;
+      item.addEventListener('click', () => {
+        setnrInput.value = hit.number.replace(/-\d+$/, '');
+        setnaamInput.value = hit.name;
+        showSetResult(hit);
+        updateLegoDeeplink();
+        if (setnrInput.value.trim()) startNasFilePoll();
+      });
+      list.appendChild(item);
+    });
   } catch (err) {
-    console.warn('Setopzoeken via NAS-proxy mislukt', err);
-    resultBox.innerHTML =
-      `<div class="info">Automatisch zoeken lukte niet (${err.message}). Zit je tablet op hetzelfde wifi-netwerk ` +
-      `als de NAS (${BRICKSET_PROXY_BASE})? En stond er bij de eerste keer een toestemmingsvraagje van Chrome ` +
-      `("verbinden met apparaten op je lokale netwerk") — die moet op Toestaan staan. Je kunt de setnaam ook ` +
-      `gewoon zelf hierboven invullen.</div>`;
+    console.warn('Zoeken op naam mislukt', err);
+    resultBox.innerHTML = `<div class="info">Zoeken op naam mislukt (${err.message}).</div>`;
   }
 });
 
