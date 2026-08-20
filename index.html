@@ -230,6 +230,16 @@
   .pg.type-skip{opacity:.4;}
   .pg.type-skip .tagchip{background:var(--ink-soft); color:#fff;}
   .pg.type-skip.bagstart{opacity:.7;} /* een zakje-start die je toch uitsluit blijft goed zichtbaar */
+  .pg.suggested{border-color:var(--amber); border-width:3px; border-style:dashed;}
+  .pg.suggested .tagchip{background:var(--amber); color:#3a2a05;}
+  .pg.suggested.low-confidence{border-color:var(--brick-red);}
+  .pg.suggested.low-confidence .tagchip{background:var(--brick-red); color:#fff;}
+  .pg .thumb-editlabel{
+    position:absolute; top:4px; left:4px; width:22px; height:22px; border-radius:50%;
+    background:rgba(28,35,51,.75); color:#fff; border:none; font-size:11px; line-height:22px;
+    text-align:center; padding:0; cursor:pointer; z-index:2;
+  }
+  .pg .thumb-editlabel:hover{background:var(--brick-red);}
   .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--ink-soft);}
   .legend span{display:inline-flex; align-items:center; gap:6px;}
   .swatch{width:12px;height:12px;border-radius:3px; display:inline-block;}
@@ -687,6 +697,15 @@
         pagina zelf een bouwstap is of wordt overgeslagen — een pagina met zowel het zakje-icoon als echte
         bouwstappen erop markeer je hier gewoon als zakje-start; die bouwstappen blijven dan meetellen.
       </p>
+      <div class="row" style="margin-top:10px; align-items:center; gap:10px;">
+        <button type="button" class="secondary" id="autoDetectBtn">✨ Automatisch zakjes voorstellen (bèta)</button>
+      </div>
+      <p class="hint" style="margin:6px 0 0; font-size:12px;">
+        Werkt vooralsnog alleen voor sets met het ronde zakje-icoon (2022+). Dit zijn <b>voorstellen</b> — gestippeld
+        weergegeven in het raster — geen definitieve markeringen. Klik een voorstel aan om het over te nemen; klopt
+        het cijfer niet, klik dan op het ✏️-potloodje om het te corrigeren.
+      </p>
+      <div id="autoDetectStatus" style="font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:6px; min-height:16px;"></div>
       <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin-top:10px; cursor:pointer;">
         <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
         Elke handleiding heeft eigen zakjes-nummering (begint steeds opnieuw bij 1)
@@ -1293,7 +1312,10 @@ async function buildPageGrid() {
         thumbCacheSet(cacheKey, { thumb, w, h }); // fire-and-forget, hoeft niet af te wachten
       }
       const type = (i === 1) ? 'skip' : 'step'; // best guess: page 1 is usually a cover
-      pageMeta[i - 1] = { index: i, type, isBagStart: false, bagNumber: null, bagLabel: null, docIndex: ref.docIndex, thumb, w, h };
+      pageMeta[i - 1] = {
+        index: i, type, isBagStart: false, bagNumber: null, bagLabel: null, docIndex: ref.docIndex, thumb, w, h,
+        suggestedLabel: null, suggestedConfidence: null, suggestedGlyphMasks: null, suggestionPending: false,
+      };
       completed++;
       if (completed % 8 === 0 || completed === totalPages) {
         statusEl.textContent = `Thumbnails renderen… pagina ${completed} / ${totalPages}` +
@@ -1328,7 +1350,10 @@ function renderGrid() {
       lastDocIndex = p.docIndex;
     }
     const div = document.createElement('div');
-    div.className = 'pg type-' + p.type + (p.isBagStart ? ' bagstart' : '');
+    const suggestedClasses = (p.suggestionPending && !p.isBagStart)
+      ? ' suggested' + (p.suggestedConfidence !== null && p.suggestedConfidence < 0.55 ? ' low-confidence' : '')
+      : '';
+    div.className = 'pg type-' + p.type + (p.isBagStart ? ' bagstart' : '') + suggestedClasses;
     div.appendChild(p.thumb);
     const num = document.createElement('div');
     num.className = 'pgnum';
@@ -1345,14 +1370,33 @@ function renderGrid() {
     // en "overslaan" tonen hun label altijd — dat is nuttige feedback tijdens het klikken zelf.
     const chipParts = [];
     if (p.isBagStart) chipParts.push('ZAKJE ' + (p.bagLabel ?? p.bagNumber));
+    else if (p.suggestionPending) {
+      const pct = p.suggestedConfidence !== null ? Math.round(p.suggestedConfidence * 100) + '%' : '?';
+      chipParts.push(`VOORSTEL: ${p.suggestedLabel} (${pct})`);
+    }
     if (p.type === 'skip') chipParts.push('OVERSLAAN');
-    else if (!p.isBagStart && p.bagNumber && hasFinishedNumbering) chipParts.push('zakje ' + (p.bagLabel ?? p.bagNumber));
+    else if (!p.isBagStart && !p.suggestionPending && p.bagNumber && hasFinishedNumbering) chipParts.push('zakje ' + (p.bagLabel ?? p.bagNumber));
     const chipText = chipParts.join(' · ');
     if (chipText) {
       const chip = document.createElement('div');
       chip.className = 'tagchip';
       chip.textContent = chipText;
       div.appendChild(chip);
+    }
+    if (p.isBagStart) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'thumb-editlabel';
+      editBtn.title = 'Zakjenummer corrigeren';
+      editBtn.textContent = '✏️';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const input = prompt('Correct zakjenummer voor deze pagina (zoals op het fysieke zakje):', p.bagLabel ?? p.bagNumber);
+        if (input === null || input.trim() === '') return;
+        p.bagLabel = parseInt(input, 10) || p.bagLabel;
+        renderGrid();
+      });
+      div.appendChild(editBtn);
     }
     const refreshBtn = document.createElement('button');
     refreshBtn.type = 'button';
@@ -1392,12 +1436,16 @@ function cycleType(i) {
       p.bagLabel = null;
     } else {
       const nextNum = pageMeta.filter(x => x.isBagStart).length + 1;
-      const nextLabel = parallel
-        ? pageMeta.filter(x => x.isBagStart && x.docIndex === p.docIndex).length + 1
-        : nextNum;
+      const suggestedLabelNum = p.suggestionPending ? parseInt(p.suggestedLabel, 10) : null;
+      const nextLabel = (suggestedLabelNum && !isNaN(suggestedLabelNum))
+        ? suggestedLabelNum
+        : (parallel
+          ? pageMeta.filter(x => x.isBagStart && x.docIndex === p.docIndex).length + 1
+          : nextNum);
       p.isBagStart = true;
       p.bagNumber = nextNum;   // intern, uniek over de hele set — bepaalt de bouw-/sloopvolgorde
       p.bagLabel = nextLabel;  // wat we aan jou tonen — matcht het fysieke zakje
+      p.suggestionPending = false; // geaccepteerd, geen "voorstel" meer maar een echte markering
     }
     renumberBags();
     renderGrid();
@@ -1443,6 +1491,50 @@ function stopExcludingSilently() {
   excludeBagsBtn.classList.remove('active-mode');
   document.getElementById('excludingStatus').textContent = '';
 }
+
+// ---------- automatische zakjes-voorstellen (bèta) ----------
+document.getElementById('autoDetectBtn').addEventListener('click', async () => {
+  const setnr = setnrInput.value.trim();
+  const statusBox = document.getElementById('autoDetectStatus');
+  if (!setnr) {
+    statusBox.textContent = 'Vul eerst een setnummer in bij stap 1.';
+    return;
+  }
+  const btn = document.getElementById('autoDetectBtn');
+  btn.disabled = true;
+  statusBox.textContent = 'Bezig met scannen — dit kan bij grote handleidingen een minuut of langer duren…';
+  try {
+    const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr) + '/auto-detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setnaam: setnaamInput.value.trim() }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+
+    let applied = 0, lowConfidence = 0;
+    (data.suggestions || []).forEach((s) => {
+      const p = pageMeta[s.globalIndex - 1];
+      if (!p) return;
+      p.suggestedLabel = s.suggestedNumber;
+      p.suggestedConfidence = s.confidence;
+      p.suggestedGlyphMasks = s.glyphMasks;
+      p.suggestionPending = true;
+      applied++;
+      if (s.needsReview) lowConfidence++;
+    });
+    statusBox.textContent = applied
+      ? `${applied} voorstel(len) gevonden (waarvan ${lowConfidence} met lage betrouwbaarheid, rood gestippeld). ` +
+        `Klik een voorstel aan om over te nemen, of het ✏️-potloodje om het cijfer aan te passen.`
+      : 'Geen zakje-iconen gevonden — mogelijk een oudere set (vierkant icoon), die wordt nog niet ondersteund.';
+    renderGrid();
+  } catch (err) {
+    console.warn('Automatisch voorstellen mislukt', err);
+    statusBox.textContent = `Automatisch voorstellen mislukt (${err.message}). Zit dit apparaat op hetzelfde ` +
+      `wifi-netwerk als de NAS?`;
+  }
+  btn.disabled = false;
+});
 
 numberBagsBtn.addEventListener('click', () => {
   stopExcludingSilently();
@@ -1719,6 +1811,32 @@ renderStep._req = 0;
 document.getElementById('prevBtn').addEventListener('click', () => { if (curIdx > 0) renderStep(curIdx - 1); });
 document.getElementById('nextBtn').addEventListener('click', () => { if (curIdx < reversedSteps.length - 1) renderStep(curIdx + 1); });
 
+async function submitConfirmedGlyphsToLibrary() {
+  // Elke zakje-startpagina die uit een AI-voorstel kwam (geaccepteerd of via het
+  // potloodje gecorrigeerd) levert hiermee zijn cijfer(s) terug aan de bibliotheek —
+  // zo wordt de herkenning geleidelijk beter tijdens normaal gebruik.
+  const items = [];
+  pageMeta.forEach((p) => {
+    if (!p.isBagStart || !p.suggestedGlyphMasks) return;
+    const finalDigits = String(p.bagLabel ?? '').split('').map(Number);
+    if (finalDigits.length !== p.suggestedGlyphMasks.length) return; // aantal cijfers klopt niet meer, overslaan
+    finalDigits.forEach((digit, idx) => {
+      if (isNaN(digit)) return;
+      items.push({ digit, mask: p.suggestedGlyphMasks[idx], source: `${setnrInput.value.trim()}_p${p.index}` });
+    });
+  });
+  if (!items.length) return;
+  try {
+    await fetch(BRICKSET_PROXY_BASE + '/templates/confirm-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+  } catch (err) {
+    console.warn('Kon bevestigde cijfers niet terugsturen naar de bibliotheek', err);
+  }
+}
+
 document.getElementById('generateBtn').addEventListener('click', async () => {
   if (!setnrInput.value.trim()) {
     alert('Vul eerst een setnummer in (stap 1, bovenaan). Zonder setnummer kan BrickRewind je voortgang niet ' +
@@ -1732,6 +1850,7 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
   // bewust nooit de sloopgids zelf, dat is exclusief voor fase 2 ("Beginnen/verdergaan").
   if (!(await generateReversedSteps())) { ombouwFinished = false; return; }
   await saveProgress();
+  submitConfirmedGlyphsToLibrary(); // fire-and-forget, hoeft niet afgewacht te worden
   showPhase('phaseChoice');
   const msg = document.getElementById('phaseChoiceMessage');
   msg.style.display = 'block';
@@ -1762,19 +1881,37 @@ document.getElementById('libraryCheckInput').addEventListener('input', () => {
   result.className = '';
   result.textContent = 'Checken…';
   libraryCheckDebounce = setTimeout(async () => {
+    const isPureNumber = /^\d+$/.test(val);
     try {
-      const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(val));
-      if (resp.ok) {
-        const entry = await resp.json();
-        result.className = 'found';
-        const pieces = entry.brickset && entry.brickset.pieces ? ` · ${entry.brickset.pieces} onderdelen` : '';
-        result.innerHTML = `✓ <b>${entry.setnaam || val}</b> staat al in de bibliotheek${pieces} — klik op ` +
-          `"Beginnen / verdergaan" om te slopen.`;
-      } else if (resp.status === 404) {
-        result.className = 'notfound';
-        result.textContent = 'Nog niet in de bibliotheek — kies "Set ombouwen" om te beginnen.';
+      if (isPureNumber) {
+        const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(val));
+        if (resp.ok) {
+          const entry = await resp.json();
+          result.className = 'found';
+          const pieces = entry.brickset && entry.brickset.pieces ? ` · ${entry.brickset.pieces} onderdelen` : '';
+          result.innerHTML = `✓ <b>${entry.setnaam || val}</b> staat al in de bibliotheek${pieces} — klik op ` +
+            `"Beginnen / verdergaan" om te slopen.`;
+        } else if (resp.status === 404) {
+          result.className = 'notfound';
+          result.textContent = 'Nog niet in de bibliotheek — kies "Set ombouwen" om te beginnen.';
+        } else {
+          throw new Error('HTTP ' + resp.status);
+        }
       } else {
-        throw new Error('HTTP ' + resp.status);
+        // Geen zuiver getal — doorzoek de bibliotheeklijst zelf op (een deel van) de naam.
+        const sets = await fetchLibrarySets();
+        const needle = val.toLowerCase();
+        const matches = sets.filter((s) => (s.setnaam || '').toLowerCase().includes(needle));
+        if (!matches.length) {
+          result.className = 'notfound';
+          result.textContent = `Geen sets met "${val}" in de naam gevonden in de bibliotheek — kies "Set ` +
+            `ombouwen" om te beginnen.`;
+        } else {
+          result.className = 'found';
+          result.innerHTML = '✓ Al in de bibliotheek: ' + matches.map((s) =>
+            `<b>${s.setnaam}</b> (${s.setnr})`
+          ).join(', ') + ' — klik op "Beginnen / verdergaan" om te slopen.';
+        }
       }
     } catch (err) {
       result.className = 'error';
