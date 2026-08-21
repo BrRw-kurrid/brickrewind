@@ -706,6 +706,9 @@
         het cijfer niet, klik dan op het ✏️-potloodje om het te corrigeren.
       </p>
       <div id="autoDetectStatus" style="font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-top:6px; min-height:16px;"></div>
+      <div id="autoDetectProgressWrap" style="display:none; height:8px; border-radius:4px; background:var(--paper); border:1px solid var(--line); overflow:hidden; margin-top:6px;">
+        <div id="autoDetectProgressBar" style="height:100%; width:0%; background:var(--amber); transition:width .3s ease;"></div>
+      </div>
       <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft); margin-top:10px; cursor:pointer;">
         <input type="checkbox" id="parallelNumberingCheckbox" style="margin:0;">
         Elke handleiding heeft eigen zakjes-nummering (begint steeds opnieuw bij 1)
@@ -1496,21 +1499,47 @@ function stopExcludingSilently() {
 document.getElementById('autoDetectBtn').addEventListener('click', async () => {
   const setnr = setnrInput.value.trim();
   const statusBox = document.getElementById('autoDetectStatus');
+  const progressWrap = document.getElementById('autoDetectProgressWrap');
+  const progressBar = document.getElementById('autoDetectProgressBar');
   if (!setnr) {
     statusBox.textContent = 'Vul eerst een setnummer in bij stap 1.';
     return;
   }
   const btn = document.getElementById('autoDetectBtn');
   btn.disabled = true;
-  statusBox.textContent = 'Bezig met scannen — dit kan bij grote handleidingen een minuut of langer duren…';
+  statusBox.textContent = 'Scan starten…';
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+
   try {
-    const resp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr) + '/auto-detect', {
+    const startResp = await fetch(BRICKSET_PROXY_BASE + '/library/' + encodeURIComponent(setnr) + '/auto-detect/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ setnaam: setnaamInput.value.trim() }),
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+    const startData = await startResp.json();
+    if (!startResp.ok) throw new Error(startData.error || ('HTTP ' + startResp.status));
+    const jobId = startData.jobId;
+
+    // Elke 2 seconden de voortgang opvragen, tot de taak klaar is of mislukt.
+    let data;
+    while (true) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const statusResp = await fetch(BRICKSET_PROXY_BASE + '/auto-detect/status/' + encodeURIComponent(jobId));
+      data = await statusResp.json();
+      if (!statusResp.ok) throw new Error(data.error || ('HTTP ' + statusResp.status));
+
+      if (data.status === 'running') {
+        const pct = data.total ? Math.round((data.processed / data.total) * 100) : 0;
+        progressBar.style.width = pct + '%';
+        statusBox.textContent = `Bezig… pagina ${data.processed} / ${data.total} (${pct}%)`;
+      } else if (data.status === 'done') {
+        progressBar.style.width = '100%';
+        break;
+      } else if (data.status === 'error') {
+        throw new Error(data.error || 'onbekende fout');
+      }
+    }
 
     let applied = 0, lowConfidence = 0;
     (data.suggestions || []).forEach((s) => {
@@ -1533,6 +1562,7 @@ document.getElementById('autoDetectBtn').addEventListener('click', async () => {
     statusBox.textContent = `Automatisch voorstellen mislukt (${err.message}). Zit dit apparaat op hetzelfde ` +
       `wifi-netwerk als de NAS?`;
   }
+  progressWrap.style.display = 'none';
   btn.disabled = false;
 });
 
