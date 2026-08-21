@@ -152,6 +152,11 @@
   html, body{-webkit-tap-highlight-color:transparent;}
   button, .file-picker-btn, .suggest-item{-webkit-user-select:none; user-select:none; touch-action:manipulation;}
   button{min-height:44px;}
+  html, body{
+    overscroll-behavior-y: contain; /* voorkomt dat een omlaag-veeg vanaf de bovenkant per
+      ongeluk de browser-eigen "pull-to-refresh" activeert, waarmee je de hele pagina (en
+      dus je plek in de sloopgids) kwijtraakt */
+  }
   body{
     padding-top:max(28px, env(safe-area-inset-top));
     padding-left:max(18px, env(safe-area-inset-left));
